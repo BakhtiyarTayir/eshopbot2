@@ -1,0 +1,2 @@
+https://api.telegram.org/bot5474897781:AAEJZwtprwz63fo_HlE8KtVbWXUJUdcCFU8/deleteWebhook 
+https://api.telegram.org/bot5474897781:AAEJZwtprwz63fo_HlE8KtVbWXUJUdcCFU8/setWebhook?url=https://striking-pelican-singular.ngrok-free.app/webhook
