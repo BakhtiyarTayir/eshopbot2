@@ -7,7 +7,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.objects.Update;
-import uz.uportal.telegramshop.service.TelegramBotService;
+import uz.uportal.telegramshop.service.bot.TelegramBotService;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 @RestController
 public class WebhookController {
@@ -15,7 +16,7 @@ public class WebhookController {
     private final TelegramBotService telegramBotService;
     private static final Logger logger = LoggerFactory.getLogger(WebhookController.class);
     
-    public WebhookController(TelegramBotService telegramBotService) {
+    public WebhookController(@Qualifier("newTelegramBotService") TelegramBotService telegramBotService) {
         this.telegramBotService = telegramBotService;
     }
     
