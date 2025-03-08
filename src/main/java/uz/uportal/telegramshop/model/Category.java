@@ -14,6 +14,9 @@ public class Category {
     
     private String name;
     
+    @Column(unique = true)
+    private String slug;
+    
     @OneToMany(mappedBy = "category", cascade = CascadeType.ALL)
     private List<Product> products = new ArrayList<>();
     
@@ -24,6 +27,13 @@ public class Category {
     
     public Category(String name) {
         this.name = name;
+        this.slug = generateSlug(name);
+    }
+    
+    private String generateSlug(String name) {
+        return name.toLowerCase()
+                  .replaceAll("[^a-zA-Z0-9\\s]", "")
+                  .replaceAll("\\s+", "-");
     }
     
     public Long getId() {
@@ -40,6 +50,14 @@ public class Category {
     
     public void setName(String name) {
         this.name = name;
+    }
+    
+    public String getSlug() {
+        return slug;
+    }
+    
+    public void setSlug(String slug) {
+        this.slug = slug;
     }
     
     public List<Product> getProducts() {
