@@ -6,6 +6,7 @@ import uz.uportal.telegramshop.model.Order;
 import uz.uportal.telegramshop.model.Product;
 import uz.uportal.telegramshop.model.TelegramUser;
 import uz.uportal.telegramshop.repository.OrderRepository;
+import uz.uportal.telegramshop.model.CartItem;
 
 import java.util.List;
 import java.util.Optional;
@@ -72,5 +73,22 @@ public class OrderService {
     // Отмена заказа
     public Order cancelOrder(Long orderId) {
         return updateOrderStatus(orderId, "CANCELLED");
+    }
+    
+    // Создание заказа из корзины
+    public Order createOrder(TelegramUser user, List<CartItem> cartItems, String phoneNumber, String address) {
+        // Создаем заказ с информацией из первого товара в корзине
+        if (cartItems.isEmpty()) {
+            return null;
+        }
+        
+        // Создаем заказ для каждого товара в корзине
+        Order lastOrder = null;
+        for (CartItem cartItem : cartItems) {
+            Order order = new Order(user, cartItem.getProduct(), cartItem.getQuantity(), address, phoneNumber);
+            lastOrder = orderRepository.save(order);
+        }
+        
+        return lastOrder;
     }
 } 

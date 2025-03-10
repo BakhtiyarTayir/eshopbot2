@@ -14,6 +14,9 @@ public class Category {
     
     private String name;
     
+    @Column(length = 1000)
+    private String description;
+    
     @Column(unique = true)
     private String slug;
     
@@ -27,6 +30,12 @@ public class Category {
     
     public Category(String name) {
         this.name = name;
+        this.slug = generateSlug(name);
+    }
+    
+    public Category(String name, String description) {
+        this.name = name;
+        this.description = description;
         this.slug = generateSlug(name);
     }
     
@@ -50,6 +59,14 @@ public class Category {
     
     public void setName(String name) {
         this.name = name;
+    }
+    
+    public String getDescription() {
+        return description;
+    }
+    
+    public void setDescription(String description) {
+        this.description = description;
     }
     
     public String getSlug() {

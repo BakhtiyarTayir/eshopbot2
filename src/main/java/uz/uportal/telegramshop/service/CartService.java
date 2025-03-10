@@ -7,6 +7,7 @@ import uz.uportal.telegramshop.model.Product;
 import uz.uportal.telegramshop.model.TelegramUser;
 import uz.uportal.telegramshop.repository.CartItemRepository;
 import uz.uportal.telegramshop.repository.ProductRepository;
+import uz.uportal.telegramshop.repository.TelegramUserRepository;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -20,10 +21,15 @@ public class CartService {
     
     private final CartItemRepository cartItemRepository;
     private final ProductRepository productRepository;
+    private final TelegramUserRepository telegramUserRepository;
     
-    public CartService(CartItemRepository cartItemRepository, ProductRepository productRepository) {
+    public CartService(
+            CartItemRepository cartItemRepository, 
+            ProductRepository productRepository,
+            TelegramUserRepository telegramUserRepository) {
         this.cartItemRepository = cartItemRepository;
         this.productRepository = productRepository;
+        this.telegramUserRepository = telegramUserRepository;
     }
     
     /**
@@ -161,5 +167,45 @@ public class CartService {
      */
     public boolean isCartEmpty(TelegramUser user) {
         return getCartItems(user).isEmpty();
+    }
+    
+    /**
+     * Получить информацию о корзине пользователя в виде текста
+     * @param chatId ID чата пользователя
+     * @return текстовая информация о корзине
+     */
+    public String getCartInfo(Long chatId) {
+        Optional<TelegramUser> userOpt = telegramUserRepository.findById(chatId);
+        if (userOpt.isEmpty()) {
+            return "";
+        }
+        
+        TelegramUser user = userOpt.get();
+        List<CartItem> cartItems = getCartItems(user);
+        
+        if (cartItems.isEmpty()) {
+            return "";
+        }
+        
+        StringBuilder cartInfo = new StringBuilder();
+        int index = 1;
+        
+        for (CartItem item : cartItems) {
+            Product product = item.getProduct();
+            cartInfo.append(index).append(". ")
+                   .append(product.getName())
+                   .append(" - ")
+                   .append(item.getQuantity())
+                   .append(" шт. x ")
+                   .append(product.getPrice())
+                   .append(" = ")
+                   .append(product.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                   .append(" руб.\n");
+            index++;
+        }
+        
+        cartInfo.append("\nИтого: ").append(getCartTotal(user)).append(" руб.");
+        
+        return cartInfo.toString();
     }
 } 
