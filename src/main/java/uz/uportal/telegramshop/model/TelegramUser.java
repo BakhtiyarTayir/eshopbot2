@@ -17,6 +17,7 @@ public class TelegramUser {
     private LocalDateTime registeredAt;
     private String state;
     private String role;
+    private String tempData; // Временные данные для многошаговых операций
     
     // Конструкторы, геттеры и сеттеры
     
@@ -31,6 +32,7 @@ public class TelegramUser {
         this.registeredAt = LocalDateTime.now();
         this.state = "NEW";
         this.role = "USER";
+        this.tempData = null;
     }
     
     // Геттеры и сеттеры
@@ -100,5 +102,13 @@ public class TelegramUser {
     
     public boolean isAdmin() {
         return "ADMIN".equals(role);
+    }
+    
+    public String getTempData() {
+        return tempData;
+    }
+    
+    public void setTempData(String tempData) {
+        this.tempData = tempData;
     }
 } 
