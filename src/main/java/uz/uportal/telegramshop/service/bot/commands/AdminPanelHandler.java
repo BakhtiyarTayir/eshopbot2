@@ -13,6 +13,7 @@ import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import uz.uportal.telegramshop.model.Category;
 import uz.uportal.telegramshop.model.Product;
 import uz.uportal.telegramshop.model.TelegramUser;
@@ -23,6 +24,7 @@ import uz.uportal.telegramshop.service.bot.core.UpdateHandler;
 import uz.uportal.telegramshop.service.bot.keyboards.KeyboardFactory;
 import uz.uportal.telegramshop.service.bot.core.MessageSender;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -63,14 +65,21 @@ public class AdminPanelHandler implements UpdateHandler {
         }
         
         String text = update.getMessage().getText();
-        return text.equals("⚙️ Админ панель") || 
+        boolean canHandle = text.equals("⚙️ Админ панель") || 
                text.equals("📋 Список товаров") || 
                text.equals("➕ Добавить товар") || 
                text.equals("🗂 Список категорий") || 
                text.equals("➕ Добавить категорию") || 
                text.equals("📦 Управление заказами") || 
                text.equals("👥 Список пользователей") || 
+               text.contains("Список пользователей") ||
                text.equals("⬅️ Вернуться в главное меню");
+        
+        if (text.contains("пользователей")) {
+            logger.info("Button text contains 'пользователей': '{}', canHandle: {}", text, canHandle);
+        }
+        
+        return canHandle;
     }
     
     @Override
@@ -113,6 +122,12 @@ public class AdminPanelHandler implements UpdateHandler {
             case "⬅️ Вернуться в главное меню":
                 return handleBackToMainMenu(chatId, user);
             default:
+                // Проверяем по содержанию для кнопки "Список пользователей"
+                if (text.contains("Список пользователей")) {
+                    logger.info("Matching 'Список пользователей' by contains for: {}", text);
+                    return handleUsersList(chatId, 1);
+                }
+                
                 // Если команда не распознана, отправляем подсказку
                 logger.warn("Unrecognized admin panel command: {}", text);
                 return createTextMessage(chatId, "Пожалуйста, используйте кнопки меню для навигации.");
@@ -301,8 +316,65 @@ public class AdminPanelHandler implements UpdateHandler {
         SendMessage sendMessage = new SendMessage();
         sendMessage.setChatId(chatId);
         sendMessage.setText("📦 *Управление заказами*\n\n" +
-                "Функция находится в разработке.");
+                "Выберите фильтр для просмотра заказов:");
         sendMessage.setParseMode("Markdown");
+        
+        // Создаем клавиатуру с кнопками фильтрации заказов
+        InlineKeyboardMarkup keyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
+        
+        // Первый ряд кнопок
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        
+        InlineKeyboardButton allButton = new InlineKeyboardButton();
+        allButton.setText("Все заказы");
+        allButton.setCallbackData("orders_all");
+        row1.add(allButton);
+        
+        keyboard.add(row1);
+        
+        // Второй ряд кнопок
+        List<InlineKeyboardButton> row2 = new ArrayList<>();
+        
+        InlineKeyboardButton newButton = new InlineKeyboardButton();
+        newButton.setText("🆕 Новые");
+        newButton.setCallbackData("orders_new");
+        row2.add(newButton);
+        
+        InlineKeyboardButton processingButton = new InlineKeyboardButton();
+        processingButton.setText("🔄 В обработке");
+        processingButton.setCallbackData("orders_processing");
+        row2.add(processingButton);
+        
+        keyboard.add(row2);
+        
+        // Третий ряд кнопок
+        List<InlineKeyboardButton> row3 = new ArrayList<>();
+        
+        InlineKeyboardButton completedButton = new InlineKeyboardButton();
+        completedButton.setText("✅ Выполненные");
+        completedButton.setCallbackData("orders_completed");
+        row3.add(completedButton);
+        
+        InlineKeyboardButton cancelledButton = new InlineKeyboardButton();
+        cancelledButton.setText("❌ Отмененные");
+        cancelledButton.setCallbackData("orders_cancelled");
+        row3.add(cancelledButton);
+        
+        keyboard.add(row3);
+        
+        // Четвертый ряд с кнопкой возврата
+        List<InlineKeyboardButton> row4 = new ArrayList<>();
+        
+        InlineKeyboardButton backButton = new InlineKeyboardButton();
+        backButton.setText("⬅️ Назад в админ панель");
+        backButton.setCallbackData("back_to_admin");
+        row4.add(backButton);
+        
+        keyboard.add(row4);
+        
+        keyboardMarkup.setKeyboard(keyboard);
+        sendMessage.setReplyMarkup(keyboardMarkup);
         
         return sendMessage;
     }
@@ -330,10 +402,18 @@ public class AdminPanelHandler implements UpdateHandler {
         List<TelegramUser> users = usersPage.getContent();
         for (int i = 0; i < users.size(); i++) {
             TelegramUser user = users.get(i);
-            messageText.append(i + 1).append(". *").append(user.getFirstName()).append(" ").append(user.getLastName() != null ? user.getLastName() : "").append("*\n");
-            messageText.append("   Username: @").append(user.getUsername() != null ? user.getUsername() : "Не указан").append("\n");
-            messageText.append("   Роль: ").append(user.getRole()).append("\n");
-            messageText.append("   Телефон: ").append(user.getPhoneNumber() != null ? user.getPhoneNumber() : "Не указан").append("\n\n");
+            
+            // Экранируем спецсимволы Markdown для безопасного вывода данных пользователя
+            String firstName = escapeMarkdown(user.getFirstName());
+            String lastName = user.getLastName() != null ? escapeMarkdown(user.getLastName()) : "";
+            String username = user.getUsername() != null ? escapeMarkdown(user.getUsername()) : "Не указан";
+            String role = escapeMarkdown(user.getRole());
+            String phone = user.getPhoneNumber() != null ? escapeMarkdown(user.getPhoneNumber()) : "Не указан";
+            
+            messageText.append(i + 1).append(". *").append(firstName).append(" ").append(lastName).append("*\n");
+            messageText.append("   Username: @").append(username).append("\n");
+            messageText.append("   Роль: ").append(role).append("\n");
+            messageText.append("   Телефон: ").append(phone).append("\n\n");
         }
         
         SendMessage sendMessage = new SendMessage();
@@ -342,7 +422,41 @@ public class AdminPanelHandler implements UpdateHandler {
         sendMessage.setParseMode("Markdown");
         sendMessage.setReplyMarkup(keyboardFactory.createUserPaginationKeyboard(page, usersPage.getTotalPages()));
         
-        return sendMessage;
+        try {
+            // Напрямую отправляем сообщение через messageSender
+            messageSender.executeMessage(sendMessage);
+            
+            // Возвращаем пустое сообщение, чтобы избежать двойной отправки
+            SendMessage emptyMessage = new SendMessage();
+            emptyMessage.setChatId(chatId);
+            emptyMessage.setText("");
+            return emptyMessage;
+        } catch (Exception e) {
+            logger.error("Ошибка при отправке списка пользователей: {}", e.getMessage(), e);
+            
+            // В случае ошибки возвращаем сообщение об ошибке
+            SendMessage errorMessage = new SendMessage();
+            errorMessage.setChatId(chatId);
+            errorMessage.setText("Произошла ошибка при получении списка пользователей. Пожалуйста, попробуйте позже.");
+            return errorMessage;
+        }
+    }
+    
+    /**
+     * Экранирует специальные символы Markdown
+     * @param text текст для экранирования
+     * @return экранированный текст
+     */
+    private String escapeMarkdown(String text) {
+        if (text == null) {
+            return "";
+        }
+        // Экранируем специальные символы Markdown: * _ ` [ ]
+        return text.replace("*", "\\*")
+                  .replace("_", "\\_")
+                  .replace("`", "\\`")
+                  .replace("[", "\\[")
+                  .replace("]", "\\]");
     }
     
     /**

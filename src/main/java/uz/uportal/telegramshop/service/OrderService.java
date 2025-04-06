@@ -86,6 +86,15 @@ public class OrderService {
     }
     
     /**
+     * Получить все заказы с пагинацией
+     * @param pageable параметры пагинации
+     * @return страница заказов
+     */
+    public Page<Order> getAllOrders(Pageable pageable) {
+        return orderRepository.findAll(pageable);
+    }
+    
+    /**
      * Создать заказ из корзины пользователя
      * @param user пользователь
      * @param address адрес доставки

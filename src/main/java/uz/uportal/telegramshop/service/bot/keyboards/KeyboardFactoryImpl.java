@@ -36,7 +36,7 @@ public class KeyboardFactoryImpl implements KeyboardFactory {
         // Вторая строка
         KeyboardRow row2 = new KeyboardRow();
         row2.add("ℹ️ Информация");
-        row2.add("❓ Помощь");
+        row2.add("❓ Поддержка");
         keyboard.add(row2);
         
         keyboardMarkup.setKeyboard(keyboard);
@@ -133,7 +133,7 @@ public class KeyboardFactoryImpl implements KeyboardFactory {
         // Вторая строка
         KeyboardRow row2 = new KeyboardRow();
         row2.add("ℹ️ Информация");
-        row2.add("❓ Помощь");
+        row2.add("❓ Поддержка");
         keyboard.add(row2);
         
         // Если пользователь админ или менеджер, добавляем кнопку админ-панели

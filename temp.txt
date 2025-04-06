@@ -1,2 +1,3 @@
 https://api.telegram.org/bot5474897781:AAEJZwtprwz63fo_HlE8KtVbWXUJUdcCFU8/deleteWebhook 
-https://api.telegram.org/bot5474897781:AAEJZwtprwz63fo_HlE8KtVbWXUJUdcCFU8/setWebhook?url=https://striking-pelican-singular.ngrok-free.app/webhook
+https://api.telegram.org/bot5474897781:AAHen_rHDqYoIAOKWH7CwGjuXQlx5VPbS8I/setWebhook?url=https://striking-pelican-singular.ngrok-free.app/webhook
+5474897781:AAHen_rHDqYoIAOKWH7CwGjuXQlx5VPbS8I
