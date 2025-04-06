@@ -2,8 +2,8 @@ package uz.uportal.telegramshop.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import uz.uportal.telegramshop.model.CartItem;
-import uz.uportal.telegramshop.model.TelegramUser;
 import uz.uportal.telegramshop.model.Product;
+import uz.uportal.telegramshop.model.TelegramUser;
 
 import java.util.List;
 import java.util.Optional;
@@ -33,4 +33,11 @@ public interface CartItemRepository extends JpaRepository<CartItem, Long> {
      * @param user пользователь
      */
     void deleteByUser(TelegramUser user);
+    
+    /**
+     * Удалить элемент корзины по пользователю и товару
+     * @param user пользователь
+     * @param product товар
+     */
+    void deleteByUserAndProduct(TelegramUser user, Product product);
 } 

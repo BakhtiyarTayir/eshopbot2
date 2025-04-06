@@ -80,6 +80,15 @@ public interface KeyboardFactory {
     InlineKeyboardMarkup createCategoryPaginationKeyboard(int page, int totalPages);
     
     /**
+     * Создает инлайн-клавиатуру для пагинации списка категорий с кнопками для каждой категории
+     * @param page текущая страница
+     * @param totalPages общее количество страниц
+     * @param categories список категорий
+     * @return клавиатура пагинации с кнопками категорий
+     */
+    InlineKeyboardMarkup createCategoryPaginationKeyboard(int page, int totalPages, List<Category> categories);
+    
+    /**
      * Создает инлайн-клавиатуру для пагинации списка пользователей
      * @param page текущая страница
      * @param totalPages общее количество страниц

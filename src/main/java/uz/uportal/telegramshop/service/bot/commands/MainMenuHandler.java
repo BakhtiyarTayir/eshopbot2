@@ -7,6 +7,8 @@ import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import uz.uportal.telegramshop.model.Category;
 import uz.uportal.telegramshop.model.TelegramUser;
 import uz.uportal.telegramshop.repository.TelegramUserRepository;
@@ -15,6 +17,7 @@ import uz.uportal.telegramshop.service.CategoryService;
 import uz.uportal.telegramshop.service.bot.core.UpdateHandler;
 import uz.uportal.telegramshop.service.bot.keyboards.KeyboardFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -105,7 +108,12 @@ public class MainMenuHandler implements UpdateHandler {
         if (categories.isEmpty()) {
             sendMessage.setText("В данный момент каталог товаров пуст. Пожалуйста, попробуйте позже.");
         } else {
-            sendMessage.setText("📋 Выберите категорию товаров:");
+            StringBuilder messageText = new StringBuilder();
+            messageText.append("📋 *Каталог товаров*\n\n");
+            messageText.append("Выберите категорию:\n\n");
+            
+            sendMessage.setText(messageText.toString());
+            sendMessage.setParseMode("Markdown");
             sendMessage.setReplyMarkup(keyboardFactory.createCatalogKeyboard(categories));
         }
         
@@ -126,6 +134,20 @@ public class MainMenuHandler implements UpdateHandler {
         
         if (cartInfo.isEmpty()) {
             sendMessage.setText("Ваша корзина пуста. Добавьте товары из каталога.");
+            
+            // Добавляем кнопку для перехода в каталог
+            InlineKeyboardMarkup keyboardMarkup = new InlineKeyboardMarkup();
+            List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
+            
+            List<InlineKeyboardButton> row = new ArrayList<>();
+            InlineKeyboardButton catalogButton = new InlineKeyboardButton();
+            catalogButton.setText("🔍 Перейти в каталог");
+            catalogButton.setCallbackData("catalog_categories");
+            row.add(catalogButton);
+            keyboard.add(row);
+            
+            keyboardMarkup.setKeyboard(keyboard);
+            sendMessage.setReplyMarkup(keyboardMarkup);
         } else {
             sendMessage.setText("🛒 Ваша корзина:\n\n" + cartInfo);
             sendMessage.setReplyMarkup(keyboardFactory.createCartKeyboard());

@@ -52,7 +52,7 @@ public class KeyboardFactoryImpl implements KeyboardFactory {
             List<InlineKeyboardButton> row = new ArrayList<>();
             InlineKeyboardButton button = new InlineKeyboardButton();
             button.setText(category.getName());
-            button.setCallbackData("category_" + category.getId());
+            button.setCallbackData("catalog_category_" + category.getId());
             row.add(button);
             keyboard.add(row);
         }
@@ -261,9 +261,27 @@ public class KeyboardFactoryImpl implements KeyboardFactory {
     }
     
     @Override
-    public InlineKeyboardMarkup createCategoryPaginationKeyboard(int page, int totalPages) {
+    public InlineKeyboardMarkup createCategoryPaginationKeyboard(int page, int totalPages, List<Category> categories) {
         InlineKeyboardMarkup keyboardMarkup = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
+        
+        // Кнопки для каждой категории
+        for (Category category : categories) {
+            // Кнопки редактирования и удаления для каждой категории
+            List<InlineKeyboardButton> categoryRow = new ArrayList<>();
+            
+            InlineKeyboardButton editButton = new InlineKeyboardButton();
+            editButton.setText("✏️ Редактировать");
+            editButton.setCallbackData("edit_category_" + category.getId());
+            categoryRow.add(editButton);
+            
+            InlineKeyboardButton deleteButton = new InlineKeyboardButton();
+            deleteButton.setText("🗑 Удалить");
+            deleteButton.setCallbackData("delete_category_" + category.getId());
+            categoryRow.add(deleteButton);
+            
+            keyboard.add(categoryRow);
+        }
         
         // Кнопки навигации
         List<InlineKeyboardButton> navigationRow = new ArrayList<>();
@@ -296,6 +314,12 @@ public class KeyboardFactoryImpl implements KeyboardFactory {
         
         keyboardMarkup.setKeyboard(keyboard);
         return keyboardMarkup;
+    }
+    
+    @Override
+    public InlineKeyboardMarkup createCategoryPaginationKeyboard(int page, int totalPages) {
+        // Для обратной совместимости
+        return createCategoryPaginationKeyboard(page, totalPages, new ArrayList<>());
     }
     
     @Override

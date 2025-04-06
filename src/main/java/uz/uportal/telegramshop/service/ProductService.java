@@ -61,11 +61,21 @@ public class ProductService {
     
     /**
      * Получить товары по категории
-     * @param category категория
+     * @param category категория товаров
      * @return список товаров в категории
      */
     public List<Product> getProductsByCategory(Category category) {
         return productRepository.findByCategory(category);
+    }
+    
+    /**
+     * Получить товары по категории с пагинацией
+     * @param category категория товаров
+     * @param pageable параметры пагинации
+     * @return страница товаров в категории
+     */
+    public Page<Product> getProductsByCategory(Category category, Pageable pageable) {
+        return productRepository.findByCategory(category, pageable);
     }
     
     /**

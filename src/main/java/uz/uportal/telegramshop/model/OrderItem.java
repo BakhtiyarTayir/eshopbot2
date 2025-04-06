@@ -4,19 +4,19 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 
 /**
- * Модель элемента корзины
+ * Модель элемента заказа
  */
 @Entity
-@Table(name = "cart_items")
-public class CartItem {
+@Table(name = "order_items")
+public class OrderItem {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
     @ManyToOne
-    @JoinColumn(name = "user_id")
-    private TelegramUser user;
+    @JoinColumn(name = "order_id")
+    private Order order;
     
     @ManyToOne
     @JoinColumn(name = "product_id")
@@ -27,15 +27,25 @@ public class CartItem {
     @Column(name = "price_per_item")
     private BigDecimal pricePerItem;
     
+    @Column(name = "product_name")
+    private String productName;
+    
     // Конструкторы
-    public CartItem() {
+    public OrderItem() {
     }
     
-    public CartItem(TelegramUser user, Product product, Integer quantity) {
-        this.user = user;
+    public OrderItem(Product product, Integer quantity) {
         this.product = product;
         this.quantity = quantity;
         this.pricePerItem = product.getPrice();
+        this.productName = product.getName();
+    }
+    
+    public OrderItem(CartItem cartItem) {
+        this.product = cartItem.getProduct();
+        this.quantity = cartItem.getQuantity();
+        this.pricePerItem = cartItem.getPricePerItem();
+        this.productName = cartItem.getProduct().getName();
     }
     
     // Геттеры и сеттеры
@@ -47,12 +57,12 @@ public class CartItem {
         this.id = id;
     }
     
-    public TelegramUser getUser() {
-        return user;
+    public Order getOrder() {
+        return order;
     }
     
-    public void setUser(TelegramUser user) {
-        this.user = user;
+    public void setOrder(Order order) {
+        this.order = order;
     }
     
     public Product getProduct() {
@@ -62,7 +72,7 @@ public class CartItem {
     public void setProduct(Product product) {
         this.product = product;
         if (product != null) {
-            this.pricePerItem = product.getPrice();
+            this.productName = product.getName();
         }
     }
     
@@ -82,18 +92,16 @@ public class CartItem {
         this.pricePerItem = pricePerItem;
     }
     
+    public String getProductName() {
+        return productName;
+    }
+    
+    public void setProductName(String productName) {
+        this.productName = productName;
+    }
+    
     // Методы
     public BigDecimal getTotalPrice() {
         return pricePerItem.multiply(new BigDecimal(quantity));
-    }
-    
-    public void incrementQuantity() {
-        this.quantity++;
-    }
-    
-    public void decrementQuantity() {
-        if (this.quantity > 1) {
-            this.quantity--;
-        }
     }
 } 

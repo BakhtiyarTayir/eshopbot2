@@ -267,7 +267,7 @@ public class AdminPanelHandler implements UpdateHandler {
         sendMessage.setChatId(chatId);
         sendMessage.setText(messageText.toString());
         sendMessage.setParseMode("Markdown");
-        sendMessage.setReplyMarkup(keyboardFactory.createCategoryPaginationKeyboard(page, categoriesPage.getTotalPages()));
+        sendMessage.setReplyMarkup(keyboardFactory.createCategoryPaginationKeyboard(page, categoriesPage.getTotalPages(), categories));
         
         return sendMessage;
     }

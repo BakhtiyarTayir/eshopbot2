@@ -14,6 +14,10 @@ import uz.uportal.telegramshop.service.CategoryService;
 import uz.uportal.telegramshop.service.bot.core.StateHandler;
 import uz.uportal.telegramshop.service.bot.keyboards.KeyboardFactory;
 
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Обработчик состояний, связанных с категориями
  */
@@ -25,6 +29,10 @@ public class CategoryStateHandler implements StateHandler {
     private final TelegramUserRepository telegramUserRepository;
     private final CategoryService categoryService;
     private final KeyboardFactory keyboardFactory;
+    
+    // Регулярное выражение для извлечения ID категории из состояния
+    private static final Pattern EDITING_CATEGORY_PATTERN = Pattern.compile("EDITING_CATEGORY_(\\d+)");
+    private static final Pattern EDITING_CATEGORY_DESCRIPTION_PATTERN = Pattern.compile("EDITING_CATEGORY_DESCRIPTION_(\\d+)");
     
     public CategoryStateHandler(
             TelegramUserRepository telegramUserRepository,
@@ -49,7 +57,10 @@ public class CategoryStateHandler implements StateHandler {
         }
         
         String state = user.getState();
-        return state.equals("ADDING_CATEGORY_NAME") || state.equals("ADDING_CATEGORY_DESCRIPTION");
+        return state.equals("ADDING_CATEGORY_NAME") || 
+               state.equals("ADDING_CATEGORY_DESCRIPTION") ||
+               state.startsWith("EDITING_CATEGORY_") ||
+               state.startsWith("EDITING_CATEGORY_DESCRIPTION_");
     }
     
     @Override
@@ -70,7 +81,10 @@ public class CategoryStateHandler implements StateHandler {
     
     @Override
     public boolean canHandleState(Update update, String state) {
-        return state.equals("ADDING_CATEGORY_NAME") || state.equals("ADDING_CATEGORY_DESCRIPTION");
+        return state.equals("ADDING_CATEGORY_NAME") || 
+               state.equals("ADDING_CATEGORY_DESCRIPTION") ||
+               state.startsWith("EDITING_CATEGORY_") ||
+               state.startsWith("EDITING_CATEGORY_DESCRIPTION_");
     }
     
     @Override
@@ -79,14 +93,27 @@ public class CategoryStateHandler implements StateHandler {
         Long chatId = message.getChatId();
         String text = message.getText();
         
-        switch (state) {
-            case "ADDING_CATEGORY_NAME":
-                return handleAddingCategoryName(chatId, text);
-            case "ADDING_CATEGORY_DESCRIPTION":
-                return handleAddingCategoryDescription(chatId, text);
-            default:
-                return null;
+        if (state.equals("ADDING_CATEGORY_NAME")) {
+            return handleAddingCategoryName(chatId, text);
+        } else if (state.equals("ADDING_CATEGORY_DESCRIPTION")) {
+            return handleAddingCategoryDescription(chatId, text);
+        } else {
+            // Проверяем, является ли состояние редактированием категории
+            Matcher editingMatcher = EDITING_CATEGORY_PATTERN.matcher(state);
+            if (editingMatcher.matches()) {
+                Long categoryId = Long.parseLong(editingMatcher.group(1));
+                return handleEditingCategoryName(chatId, categoryId, text);
+            }
+            
+            // Проверяем, является ли состояние редактированием описания категории
+            Matcher descriptionMatcher = EDITING_CATEGORY_DESCRIPTION_PATTERN.matcher(state);
+            if (descriptionMatcher.matches()) {
+                Long categoryId = Long.parseLong(descriptionMatcher.group(1));
+                return handleEditingCategoryDescription(chatId, categoryId, text);
+            }
         }
+        
+        return null;
     }
     
     /**
@@ -226,6 +253,174 @@ public class CategoryStateHandler implements StateHandler {
             telegramUserRepository.save(user);
             
             return createTextMessage(chatId, "Произошла ошибка при создании категории. Пожалуйста, попробуйте еще раз.");
+        }
+    }
+    
+    /**
+     * Обрабатывает редактирование названия категории
+     * @param chatId ID чата
+     * @param categoryId ID категории
+     * @param name новое название категории
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleEditingCategoryName(Long chatId, Long categoryId, String name) {
+        // Проверяем, хочет ли пользователь отменить операцию
+        if (name.equalsIgnoreCase("отмена") || name.equalsIgnoreCase("cancel")) {
+            // Сбрасываем состояние пользователя
+            TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+            if (user != null) {
+                user.setState(null);
+                user.setTempData(null);
+                telegramUserRepository.save(user);
+            }
+            
+            // Отправляем сообщение об отмене
+            SendMessage sendMessage = new SendMessage();
+            sendMessage.setChatId(chatId);
+            sendMessage.setText("❌ *Редактирование категории отменено*");
+            sendMessage.enableMarkdown(true);
+            sendMessage.setReplyMarkup(keyboardFactory.createAdminPanelKeyboard());
+            
+            return sendMessage;
+        }
+        
+        // Проверяем, что название не пустое
+        if (name == null || name.trim().isEmpty()) {
+            return createTextMessage(chatId, "Название категории не может быть пустым. Пожалуйста, введите название категории (или 'отмена' для отмены):");
+        }
+        
+        // Получаем категорию из базы данных
+        Optional<Category> categoryOpt = categoryService.getCategoryById(categoryId);
+        if (categoryOpt.isEmpty()) {
+            // Сбрасываем состояние пользователя
+            TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+            if (user != null) {
+                user.setState(null);
+                telegramUserRepository.save(user);
+            }
+            
+            return createTextMessage(chatId, "Категория не найдена. Возможно, она была удалена.");
+        }
+        
+        Category category = categoryOpt.get();
+        
+        // Проверяем, существует ли другая категория с таким названием
+        Category existingCategory = categoryService.getCategoryByName(name);
+        if (existingCategory != null && !existingCategory.getId().equals(categoryId)) {
+            return createTextMessage(chatId, "Категория с таким названием уже существует. Пожалуйста, введите другое название (или 'отмена' для отмены):");
+        }
+        
+        // Сохраняем старое название для сообщения
+        String oldName = category.getName();
+        
+        // Сохраняем новое название во временном хранилище
+        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+        if (user != null) {
+            user.setTempData(name);
+            user.setState("EDITING_CATEGORY_DESCRIPTION_" + categoryId);
+            telegramUserRepository.save(user);
+        }
+        
+        // Отправляем сообщение с запросом описания
+        StringBuilder messageText = new StringBuilder();
+        messageText.append("✏️ *Редактирование категории*\n\n");
+        messageText.append("Название категории изменено с \"*").append(oldName).append("*\" на \"*").append(name).append("*\".\n\n");
+        messageText.append("Текущее описание: ").append(category.getDescription() != null ? category.getDescription() : "Не указано").append("\n\n");
+        messageText.append("Введите новое описание категории (или введите 'Не менять', чтобы оставить текущее описание, или 'отмена' для отмены):");
+        
+        return createTextMessage(chatId, messageText.toString());
+    }
+    
+    /**
+     * Обрабатывает редактирование описания категории
+     * @param chatId ID чата
+     * @param categoryId ID категории
+     * @param description новое описание категории
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleEditingCategoryDescription(Long chatId, Long categoryId, String description) {
+        // Проверяем, хочет ли пользователь отменить операцию
+        if (description.equalsIgnoreCase("отмена") || description.equalsIgnoreCase("cancel")) {
+            // Сбрасываем состояние пользователя
+            TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+            if (user != null) {
+                user.setState(null);
+                user.setTempData(null);
+                telegramUserRepository.save(user);
+            }
+            
+            // Отправляем сообщение об отмене
+            SendMessage sendMessage = new SendMessage();
+            sendMessage.setChatId(chatId);
+            sendMessage.setText("❌ *Редактирование категории отменено*");
+            sendMessage.enableMarkdown(true);
+            sendMessage.setReplyMarkup(keyboardFactory.createAdminPanelKeyboard());
+            
+            return sendMessage;
+        }
+        
+        // Получаем категорию из базы данных
+        Optional<Category> categoryOpt = categoryService.getCategoryById(categoryId);
+        if (categoryOpt.isEmpty()) {
+            // Сбрасываем состояние пользователя
+            TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+            if (user != null) {
+                user.setState(null);
+                user.setTempData(null);
+                telegramUserRepository.save(user);
+            }
+            
+            return createTextMessage(chatId, "Категория не найдена. Возможно, она была удалена.");
+        }
+        
+        Category category = categoryOpt.get();
+        
+        // Получаем новое название из временного хранилища
+        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+        if (user == null || user.getTempData() == null) {
+            // Если данные пользователя не найдены, сбрасываем состояние
+            if (user != null) {
+                user.setState(null);
+                telegramUserRepository.save(user);
+            }
+            
+            return createTextMessage(chatId, "Произошла ошибка. Пожалуйста, начните редактирование категории заново.");
+        }
+        
+        String newName = user.getTempData();
+        String newDescription = description;
+        
+        // Если пользователь не хочет менять описание
+        if (description.equalsIgnoreCase("Не менять")) {
+            newDescription = category.getDescription();
+        }
+        
+        // Обновляем категорию
+        try {
+            Category updatedCategory = categoryService.updateCategory(categoryId, newName, newDescription);
+            
+            // Сбрасываем состояние пользователя
+            user.setState(null);
+            user.setTempData(null);
+            telegramUserRepository.save(user);
+            
+            // Отправляем сообщение об успешном обновлении категории
+            SendMessage sendMessage = new SendMessage();
+            sendMessage.setChatId(chatId);
+            sendMessage.setText("✅ Категория \"*" + updatedCategory.getName() + "*\" успешно обновлена!");
+            sendMessage.enableMarkdown(true);
+            sendMessage.setReplyMarkup(keyboardFactory.createAdminPanelKeyboard());
+            
+            return sendMessage;
+        } catch (Exception e) {
+            logger.error("Ошибка при обновлении категории: {}", e.getMessage());
+            
+            // Сбрасываем состояние пользователя
+            user.setState(null);
+            user.setTempData(null);
+            telegramUserRepository.save(user);
+            
+            return createTextMessage(chatId, "Произошла ошибка при обновлении категории. Пожалуйста, попробуйте еще раз.");
         }
     }
 } 
