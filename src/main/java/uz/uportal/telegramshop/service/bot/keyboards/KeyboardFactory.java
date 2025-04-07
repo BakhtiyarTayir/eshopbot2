@@ -18,14 +18,21 @@ public interface KeyboardFactory {
     ReplyKeyboardMarkup createMainKeyboard();
     
     /**
-     * Создает клавиатуру каталога
+     * Создает клавиатуру главного меню
+     * @param isAdminOrManager true, если пользователь админ или менеджер
+     * @return клавиатура главного меню
+     */
+    ReplyKeyboardMarkup createMainMenuKeyboard(boolean isAdminOrManager);
+    
+    /**
+     * Создает клавиатуру для выбора категорий каталога
      * @param categories список категорий
      * @return клавиатура каталога
      */
     InlineKeyboardMarkup createCatalogKeyboard(List<Category> categories);
     
     /**
-     * Создает клавиатуру подкатегорий для категории
+     * Создает клавиатуру для выбора подкатегорий
      * @param subcategories список подкатегорий
      * @param parentCategory родительская категория
      * @return клавиатура подкатегорий
@@ -33,23 +40,16 @@ public interface KeyboardFactory {
     InlineKeyboardMarkup createSubcategoriesKeyboard(List<Category> subcategories, Category parentCategory);
     
     /**
-     * Создает клавиатуру для подтверждения заказа
-     * @return клавиатура для подтверждения заказа
+     * Создает клавиатуру подтверждения заказа
+     * @return клавиатура подтверждения заказа
      */
     InlineKeyboardMarkup createOrderConfirmationKeyboard();
     
     /**
      * Создает клавиатуру для корзины
-     * @return клавиатура для корзины
+     * @return клавиатура корзины
      */
     InlineKeyboardMarkup createCartKeyboard();
-    
-    /**
-     * Создает главное меню с учетом прав пользователя
-     * @param isAdminOrManager флаг администратора/менеджера
-     * @return клавиатура главного меню
-     */
-    ReplyKeyboardMarkup createMainMenuKeyboard(boolean isAdminOrManager);
     
     /**
      * Создает клавиатуру админ-панели
@@ -58,14 +58,14 @@ public interface KeyboardFactory {
     ReplyKeyboardMarkup createAdminPanelKeyboard();
     
     /**
-     * Создает инлайн-клавиатуру для управления товаром
+     * Создает клавиатуру для управления товаром
      * @param productId ID товара
      * @return клавиатура управления товаром
      */
     InlineKeyboardMarkup createProductManagementKeyboard(Long productId);
     
     /**
-     * Создает инлайн-клавиатуру для управления категорией
+     * Создает клавиатуру для управления категорией
      * @param categoryId ID категории
      * @return клавиатура управления категорией
      */

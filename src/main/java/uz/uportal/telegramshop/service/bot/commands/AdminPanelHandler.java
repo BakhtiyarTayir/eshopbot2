@@ -16,10 +16,12 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMa
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import uz.uportal.telegramshop.model.Category;
 import uz.uportal.telegramshop.model.Product;
+import uz.uportal.telegramshop.model.ShopSettings;
 import uz.uportal.telegramshop.model.TelegramUser;
 import uz.uportal.telegramshop.repository.TelegramUserRepository;
 import uz.uportal.telegramshop.service.CategoryService;
 import uz.uportal.telegramshop.service.ProductService;
+import uz.uportal.telegramshop.service.ShopSettingsService;
 import uz.uportal.telegramshop.service.bot.core.UpdateHandler;
 import uz.uportal.telegramshop.service.bot.keyboards.KeyboardFactory;
 import uz.uportal.telegramshop.service.bot.core.MessageSender;
@@ -39,6 +41,7 @@ public class AdminPanelHandler implements UpdateHandler {
     private final ProductService productService;
     private final CategoryService categoryService;
     private final MessageSender messageSender;
+    private final ShopSettingsService shopSettingsService;
     
     // Константы для размера страницы при пагинации
     private static final int PRODUCTS_PAGE_SIZE = 5;
@@ -50,12 +53,14 @@ public class AdminPanelHandler implements UpdateHandler {
             KeyboardFactory keyboardFactory,
             ProductService productService,
             CategoryService categoryService,
-            MessageSender messageSender) {
+            MessageSender messageSender,
+            ShopSettingsService shopSettingsService) {
         this.telegramUserRepository = telegramUserRepository;
         this.keyboardFactory = keyboardFactory;
         this.productService = productService;
         this.categoryService = categoryService;
         this.messageSender = messageSender;
+        this.shopSettingsService = shopSettingsService;
     }
     
     @Override
@@ -72,6 +77,7 @@ public class AdminPanelHandler implements UpdateHandler {
                text.equals("➕ Добавить категорию") || 
                text.equals("📦 Управление заказами") || 
                text.equals("👥 Список пользователей") || 
+               text.equals("⚙️ Настройки магазина") ||
                text.contains("Список пользователей") ||
                text.equals("⬅️ Вернуться в главное меню");
         
@@ -119,18 +125,21 @@ public class AdminPanelHandler implements UpdateHandler {
                 return handleOrdersManagement(chatId);
             case "👥 Список пользователей":
                 return handleUsersList(chatId, 1);
+            case "⚙️ Настройки магазина":
+                return handleShopSettings(chatId);
             case "⬅️ Вернуться в главное меню":
                 return handleReturnToMainMenu(chatId);
             default:
-                // Проверяем по содержанию для кнопки "Список пользователей"
                 if (text.contains("Список пользователей")) {
-                    logger.info("Matching 'Список пользователей' by contains for: {}", text);
-                    return handleUsersList(chatId, 1);
+                    try {
+                        int page = Integer.parseInt(text.replaceAll("[^0-9]", ""));
+                        return handleUsersList(chatId, page);
+                    } catch (NumberFormatException e) {
+                        logger.error("Ошибка при парсинге номера страницы: {}", e.getMessage());
+                        return handleUsersList(chatId, 1);
+                    }
                 }
-                
-                // Если команда не распознана, отправляем подсказку
-                logger.warn("Unrecognized admin panel command: {}", text);
-                return createTextMessage(chatId, "Пожалуйста, используйте кнопки меню для навигации.");
+                return createTextMessage(chatId, "Неизвестная команда. Пожалуйста, используйте кнопки меню.");
         }
     }
     
@@ -485,5 +494,82 @@ public class AdminPanelHandler implements UpdateHandler {
         message.setChatId(chatId);
         message.setText(text);
         return message;
+    }
+    
+    /**
+     * Обрабатывает кнопку "Настройки магазина"
+     * @param chatId ID чата
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleShopSettings(Long chatId) {
+        // Получаем текущие настройки магазина
+        ShopSettings settings = shopSettingsService.getShopSettings();
+        
+        // Формируем сообщение
+        StringBuilder messageText = new StringBuilder();
+        messageText.append("⚙️ *Настройки магазина*\n\n");
+        messageText.append("*Текущие настройки:*\n\n");
+        messageText.append("📞 *Телефон:* ").append(settings.getPhone()).append("\n");
+        messageText.append("📧 *Email:* ").append(settings.getEmail()).append("\n");
+        messageText.append("🌐 *Сайт:* ").append(settings.getWebsite()).append("\n\n");
+        messageText.append("*Сообщение поддержки:*\n").append(settings.getSupportInfo()).append("\n\n");
+        messageText.append("*Информация о магазине:*\n").append(settings.getAboutInfo()).append("\n\n");
+        messageText.append("*Режим работы:*\n").append(settings.getWorkingHours()).append("\n\n");
+        messageText.append("Выберите, что хотите изменить:");
+        
+        // Создаем клавиатуру для выбора настроек
+        InlineKeyboardMarkup keyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
+        
+        // Кнопка изменения контактной информации
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        InlineKeyboardButton contactsButton = new InlineKeyboardButton();
+        contactsButton.setText("📞 Изменить контактную информацию");
+        contactsButton.setCallbackData("edit_shop_contacts");
+        row1.add(contactsButton);
+        keyboard.add(row1);
+        
+        // Кнопка изменения сообщения поддержки
+        List<InlineKeyboardButton> row2 = new ArrayList<>();
+        InlineKeyboardButton supportButton = new InlineKeyboardButton();
+        supportButton.setText("❓ Изменить сообщение поддержки");
+        supportButton.setCallbackData("edit_shop_support");
+        row2.add(supportButton);
+        keyboard.add(row2);
+        
+        // Кнопка изменения информации о магазине
+        List<InlineKeyboardButton> row3 = new ArrayList<>();
+        InlineKeyboardButton aboutButton = new InlineKeyboardButton();
+        aboutButton.setText("ℹ️ Изменить информацию о магазине");
+        aboutButton.setCallbackData("edit_shop_about");
+        row3.add(aboutButton);
+        keyboard.add(row3);
+        
+        // Кнопка изменения режима работы
+        List<InlineKeyboardButton> row4 = new ArrayList<>();
+        InlineKeyboardButton workingHoursButton = new InlineKeyboardButton();
+        workingHoursButton.setText("🕒 Изменить режим работы");
+        workingHoursButton.setCallbackData("edit_shop_hours");
+        row4.add(workingHoursButton);
+        keyboard.add(row4);
+        
+        // Кнопка возврата в админ-панель
+        List<InlineKeyboardButton> row5 = new ArrayList<>();
+        InlineKeyboardButton backButton = new InlineKeyboardButton();
+        backButton.setText("⬅️ Назад");
+        backButton.setCallbackData("back_to_admin");
+        row5.add(backButton);
+        keyboard.add(row5);
+        
+        keyboardMarkup.setKeyboard(keyboard);
+        
+        // Отправляем сообщение
+        SendMessage sendMessage = new SendMessage();
+        sendMessage.setChatId(chatId);
+        sendMessage.setText(messageText.toString());
+        sendMessage.setParseMode("Markdown");
+        sendMessage.setReplyMarkup(keyboardMarkup);
+        
+        return sendMessage;
     }
 } 

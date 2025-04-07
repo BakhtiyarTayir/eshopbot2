@@ -10,10 +10,12 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import uz.uportal.telegramshop.model.Category;
+import uz.uportal.telegramshop.model.ShopSettings;
 import uz.uportal.telegramshop.model.TelegramUser;
 import uz.uportal.telegramshop.repository.TelegramUserRepository;
 import uz.uportal.telegramshop.service.CartService;
 import uz.uportal.telegramshop.service.CategoryService;
+import uz.uportal.telegramshop.service.ShopSettingsService;
 import uz.uportal.telegramshop.service.bot.core.UpdateHandler;
 import uz.uportal.telegramshop.service.bot.keyboards.KeyboardFactory;
 
@@ -31,16 +33,19 @@ public class MainMenuHandler implements UpdateHandler {
     private final KeyboardFactory keyboardFactory;
     private final CategoryService categoryService;
     private final CartService cartService;
+    private final ShopSettingsService shopSettingsService;
     
     public MainMenuHandler(
             TelegramUserRepository telegramUserRepository,
             KeyboardFactory keyboardFactory,
             CategoryService categoryService,
-            CartService cartService) {
+            CartService cartService,
+            ShopSettingsService shopSettingsService) {
         this.telegramUserRepository = telegramUserRepository;
         this.keyboardFactory = keyboardFactory;
         this.categoryService = categoryService;
         this.cartService = cartService;
+        this.shopSettingsService = shopSettingsService;
     }
     
     @Override
@@ -53,7 +58,7 @@ public class MainMenuHandler implements UpdateHandler {
         return text.equals("🛍 Каталог") || 
                text.equals("🛒 Корзина") || 
                text.equals("ℹ️ Информация") || 
-               text.equals("❓ Помощь") || 
+               text.equals("📞 Поддержка") || 
                text.equals("⚙️ Админ панель");
     }
     
@@ -85,7 +90,7 @@ public class MainMenuHandler implements UpdateHandler {
                 return handleCart(chatId, user);
             case "ℹ️ Информация":
                 return handleInfo(chatId);
-            case "❓ Помощь":
+            case "📞 Поддержка":
                 return handleHelp(chatId);
             case "⚙️ Админ панель":
                 return handleAdminPanel(chatId, user);
@@ -165,16 +170,18 @@ public class MainMenuHandler implements UpdateHandler {
         SendMessage sendMessage = new SendMessage();
         sendMessage.setChatId(chatId);
         
+        // Получаем настройки магазина
+        ShopSettings settings = shopSettingsService.getShopSettings();
+        
         StringBuilder infoText = new StringBuilder();
         infoText.append("ℹ️ *Информация о магазине*\n\n");
-        infoText.append("Наш магазин предлагает широкий ассортимент товаров высокого качества.\n\n");
+        infoText.append(settings.getAboutInfo()).append("\n\n");
         infoText.append("*Контакты:*\n");
-        infoText.append("📞 Телефон: +7 (XXX) XXX-XX-XX\n");
-        infoText.append("📧 Email: info@example.com\n");
-        infoText.append("🌐 Сайт: www.example.com\n\n");
+        infoText.append("📞 Телефон: ").append(settings.getPhone()).append("\n");
+        infoText.append("📧 Email: ").append(settings.getEmail()).append("\n");
+        infoText.append("🌐 Сайт: ").append(settings.getWebsite()).append("\n\n");
         infoText.append("*Режим работы:*\n");
-        infoText.append("Пн-Пт: 9:00 - 20:00\n");
-        infoText.append("Сб-Вс: 10:00 - 18:00");
+        infoText.append(settings.getWorkingHours());
         
         sendMessage.setText(infoText.toString());
         sendMessage.setParseMode("Markdown");
@@ -183,7 +190,7 @@ public class MainMenuHandler implements UpdateHandler {
     }
     
     /**
-     * Обрабатывает нажатие кнопки "Помощь"
+     * Обрабатывает нажатие кнопки "Поддержка"
      * @param chatId ID чата
      * @return ответ бота
      */
@@ -191,14 +198,17 @@ public class MainMenuHandler implements UpdateHandler {
         SendMessage sendMessage = new SendMessage();
         sendMessage.setChatId(chatId);
         
+        // Получаем настройки магазина
+        ShopSettings settings = shopSettingsService.getShopSettings();
+        
         StringBuilder helpText = new StringBuilder();
-        helpText.append("❓ *Помощь*\n\n");
+        helpText.append("📞 *Поддержка*\n\n");
         helpText.append("*Основные команды:*\n");
         helpText.append("🛍 *Каталог* - просмотр категорий товаров\n");
         helpText.append("🛒 *Корзина* - просмотр и управление корзиной\n");
         helpText.append("ℹ️ *Информация* - информация о магазине\n");
-        helpText.append("❓ *Помощь* - справка по командам\n\n");
-        helpText.append("Если у вас возникли вопросы, свяжитесь с нами по телефону +7 (XXX) XXX-XX-XX");
+        helpText.append("📞 *Поддержка* - контакты для связи\n\n");
+        helpText.append(settings.getSupportInfo()).append(" ").append(settings.getPhone());
         
         sendMessage.setText(helpText.toString());
         sendMessage.setParseMode("Markdown");

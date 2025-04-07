@@ -21,10 +21,12 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import uz.uportal.telegramshop.model.Category;
 import uz.uportal.telegramshop.model.Product;
+import uz.uportal.telegramshop.model.ShopSettings;
 import uz.uportal.telegramshop.model.TelegramUser;
 import uz.uportal.telegramshop.repository.TelegramUserRepository;
 import uz.uportal.telegramshop.service.CategoryService;
 import uz.uportal.telegramshop.service.ProductService;
+import uz.uportal.telegramshop.service.ShopSettingsService;
 import uz.uportal.telegramshop.service.bot.core.MessageSender;
 import uz.uportal.telegramshop.service.bot.core.UpdateHandler;
 import uz.uportal.telegramshop.service.bot.keyboards.KeyboardFactory;
@@ -45,6 +47,7 @@ public class AdminCallbackHandler implements UpdateHandler {
     private final ProductService productService;
     private final CategoryService categoryService;
     private final MessageSender messageSender;
+    private final ShopSettingsService shopSettingsService;
     
     // Константы для размера страницы при пагинации
     private static final int PRODUCTS_PAGE_SIZE = 5;
@@ -56,12 +59,14 @@ public class AdminCallbackHandler implements UpdateHandler {
             KeyboardFactory keyboardFactory,
             ProductService productService,
             CategoryService categoryService,
-            MessageSender messageSender) {
+            MessageSender messageSender,
+            ShopSettingsService shopSettingsService) {
         this.telegramUserRepository = telegramUserRepository;
         this.keyboardFactory = keyboardFactory;
         this.productService = productService;
         this.categoryService = categoryService;
         this.messageSender = messageSender;
+        this.shopSettingsService = shopSettingsService;
     }
     
     @Override
@@ -79,6 +84,7 @@ public class AdminCallbackHandler implements UpdateHandler {
                callbackData.startsWith("products_page_") || 
                callbackData.startsWith("categories_page_") || 
                callbackData.startsWith("users_page_") || 
+               callbackData.startsWith("edit_shop_") ||
                callbackData.equals("back_to_admin");
     }
     
@@ -102,57 +108,213 @@ public class AdminCallbackHandler implements UpdateHandler {
             logger.error("Error getting messageId from callback query", e);
         }
         
-        logger.info("Handling callback: {} for chatId: {}", callbackData, chatId);
+        // Проверяем права доступа
+        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+        if (user == null || (!"ADMIN".equals(user.getRole()) && !"MANAGER".equals(user.getRole()))) {
+            return createTextMessage(chatId, "У вас нет доступа к административным функциям.");
+        }
         
         try {
             if (callbackData.startsWith("edit_product_")) {
-                return handleEditProduct(chatId, callbackData);
+                Long productId = Long.parseLong(callbackData.replace("edit_product_", ""));
+                
+                // Установим состояние пользователя для редактирования товара
+                user.setState("EDITING_PRODUCT_" + productId);
+                telegramUserRepository.save(user);
+                
+                return messageId != null 
+                    ? handleEditProduct(chatId, messageId, productId)
+                    : handleEditProduct(chatId, productId);
             } else if (callbackData.startsWith("delete_product_")) {
+                Long productId = Long.parseLong(callbackData.replace("delete_product_", ""));
                 return messageId != null 
-                    ? handleDeleteProduct(chatId, messageId, callbackData)
-                    : handleDeleteProduct(chatId, callbackData);
+                    ? handleDeleteProduct(chatId, messageId, productId)
+                    : handleDeleteProduct(chatId, productId);
             } else if (callbackData.startsWith("edit_category_")) {
-                return handleEditCategory(chatId, callbackData);
+                Long categoryId = Long.parseLong(callbackData.replace("edit_category_", ""));
+                
+                // Установим состояние пользователя для редактирования категории
+                user.setState("EDITING_CATEGORY_" + categoryId);
+                telegramUserRepository.save(user);
+                
+                return messageId != null 
+                    ? handleEditCategory(chatId, messageId, categoryId)
+                    : handleEditCategory(chatId, categoryId);
             } else if (callbackData.startsWith("delete_category_")) {
+                Long categoryId = Long.parseLong(callbackData.replace("delete_category_", ""));
                 return messageId != null 
-                    ? handleDeleteCategory(chatId, messageId, callbackData)
-                    : handleDeleteCategory(chatId, callbackData);
+                    ? handleDeleteCategory(chatId, messageId, categoryId)
+                    : handleDeleteCategory(chatId, categoryId);
             } else if (callbackData.startsWith("confirm_delete_category_")) {
+                Long categoryId = Long.parseLong(callbackData.replace("confirm_delete_category_", ""));
                 return messageId != null 
-                    ? handleConfirmDeleteCategory(chatId, messageId, callbackData)
-                    : handleConfirmDeleteCategory(chatId, callbackData);
+                    ? handleConfirmDeleteCategory(chatId, messageId, categoryId)
+                    : handleConfirmDeleteCategory(chatId, categoryId);
             } else if (callbackData.startsWith("products_page_")) {
+                int page = Integer.parseInt(callbackData.replace("products_page_", ""));
                 return messageId != null 
                     ? handleProductsPage(chatId, messageId, callbackData)
                     : handleProductsPage(chatId, callbackData);
             } else if (callbackData.startsWith("categories_page_")) {
+                int page = Integer.parseInt(callbackData.replace("categories_page_", ""));
                 return messageId != null 
                     ? handleCategoriesPage(chatId, messageId, callbackData)
                     : handleCategoriesPage(chatId, callbackData);
             } else if (callbackData.startsWith("users_page_")) {
+                int page = Integer.parseInt(callbackData.replace("users_page_", ""));
                 return messageId != null 
                     ? handleUsersPage(chatId, messageId, callbackData)
                     : handleUsersPage(chatId, callbackData);
             } else if (callbackData.equals("back_to_admin")) {
-                return handleBackToAdmin(chatId);
+                return handleBackToAdmin(chatId, messageId);
+            } else if (callbackData.startsWith("edit_shop_")) {
+                return handleEditShopSettings(chatId, messageId, callbackData);
             } else {
-                logger.warn("Unhandled callback: {}", callbackData);
+                logger.warn("Unknown callback data: {}", callbackData);
                 return null;
             }
         } catch (Exception e) {
-            logger.error("Error handling callback: {}", e.getMessage(), e);
-            return createTextMessage(chatId, "Произошла ошибка при обработке запроса. Пожалуйста, попробуйте еще раз.");
+            logger.error("Error handling admin callback: {}", e.getMessage(), e);
+            return messageId != null 
+                ? handleErrorWithEdit(chatId, messageId, "Произошла ошибка при обработке запроса.")
+                : createTextMessage(chatId, "Произошла ошибка при обработке запроса.");
+        }
+    }
+    
+    /**
+     * Обрабатывает запросы на редактирование настроек магазина
+     * @param chatId ID чата
+     * @param messageId ID сообщения
+     * @param callbackData данные callback
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleEditShopSettings(Long chatId, Integer messageId, String callbackData) {
+        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+        if (user == null) {
+            return createTextMessage(chatId, "Пользователь не найден");
+        }
+        
+        switch (callbackData) {
+            case "edit_shop_contacts":
+                user.setState("EDITING_SHOP_CONTACTS");
+                telegramUserRepository.save(user);
+                
+                ShopSettings settings = shopSettingsService.getShopSettings();
+                
+                EditMessageText editMessage = new EditMessageText();
+                editMessage.setChatId(chatId);
+                editMessage.setMessageId(messageId);
+                editMessage.setText("📞 *Изменение контактной информации*\n\n" + 
+                        "*Текущие значения:*\n" +
+                        "Телефон: " + settings.getPhone() + "\n" +
+                        "Email: " + settings.getEmail() + "\n" +
+                        "Сайт: " + settings.getWebsite() + "\n\n" +
+                        "Введите новую контактную информацию в формате:\n" +
+                        "*Телефон|Email|Сайт*\n\n" +
+                        "Например: `+7 (999) 123-45-67|info@example.com|www.example.com`");
+                editMessage.setParseMode("Markdown");
+                
+                // Отправляем сообщение
+                return editMessage;
+                
+            case "edit_shop_support":
+                user.setState("EDITING_SHOP_SUPPORT");
+                telegramUserRepository.save(user);
+                
+                ShopSettings supportSettings = shopSettingsService.getShopSettings();
+                
+                EditMessageText supportMessage = new EditMessageText();
+                supportMessage.setChatId(chatId);
+                supportMessage.setMessageId(messageId);
+                supportMessage.setText("❓ *Изменение сообщения поддержки*\n\n" + 
+                        "*Текущее значение:*\n" +
+                        supportSettings.getSupportInfo() + "\n\n" +
+                        "Введите новое сообщение поддержки:");
+                supportMessage.setParseMode("Markdown");
+                
+                // Отправляем сообщение
+                return supportMessage;
+                
+            case "edit_shop_about":
+                user.setState("EDITING_SHOP_ABOUT");
+                telegramUserRepository.save(user);
+                
+                ShopSettings aboutSettings = shopSettingsService.getShopSettings();
+                
+                EditMessageText aboutMessage = new EditMessageText();
+                aboutMessage.setChatId(chatId);
+                aboutMessage.setMessageId(messageId);
+                aboutMessage.setText("ℹ️ *Изменение информации о магазине*\n\n" + 
+                        "*Текущее значение:*\n" +
+                        aboutSettings.getAboutInfo() + "\n\n" +
+                        "Введите новую информацию о магазине:");
+                aboutMessage.setParseMode("Markdown");
+                
+                // Отправляем сообщение
+                return aboutMessage;
+                
+            case "edit_shop_hours":
+                user.setState("EDITING_SHOP_HOURS");
+                telegramUserRepository.save(user);
+                
+                ShopSettings hoursSettings = shopSettingsService.getShopSettings();
+                
+                EditMessageText hoursMessage = new EditMessageText();
+                hoursMessage.setChatId(chatId);
+                hoursMessage.setMessageId(messageId);
+                hoursMessage.setText("🕒 *Изменение режима работы*\n\n" + 
+                        "*Текущее значение:*\n" +
+                        hoursSettings.getWorkingHours().replace("\n", "\\n") + "\n\n" +
+                        "Введите новый режим работы (используйте \\n для переноса строки):");
+                hoursMessage.setParseMode("Markdown");
+                
+                // Отправляем сообщение
+                return hoursMessage;
+                
+            default:
+                logger.warn("Unknown shop settings callback: {}", callbackData);
+                return createTextMessage(chatId, "Неизвестная команда");
+        }
+    }
+    
+    /**
+     * Обрабатывает нажатие на кнопку "Назад" в настройках магазина
+     * @param chatId ID чата
+     * @param messageId ID сообщения
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleBackToAdmin(Long chatId, Integer messageId) {
+        if (messageId == null) {
+            // Если messageId не доступен, отправляем новое сообщение
+            SendMessage sendMessage = new SendMessage();
+            sendMessage.setChatId(chatId);
+            sendMessage.setText("⚙️ *Панель администратора*\n\n" +
+                    "Выберите действие из меню ниже:");
+            sendMessage.setParseMode("Markdown");
+            sendMessage.setReplyMarkup(keyboardFactory.createAdminPanelKeyboard());
+            
+            return sendMessage;
+        } else {
+            // Если messageId доступен, редактируем существующее сообщение
+            EditMessageText editMessageText = new EditMessageText();
+            editMessageText.setChatId(chatId);
+            editMessageText.setMessageId(messageId);
+            editMessageText.setText("⚙️ *Панель администратора*\n\n" +
+                    "Выберите действие из меню ниже:");
+            editMessageText.setParseMode("Markdown");
+            
+            return editMessageText;
         }
     }
     
     /**
      * Обрабатывает нажатие кнопки "Редактировать товар"
      * @param chatId ID чата
-     * @param callbackData данные callback
+     * @param messageId ID сообщения
+     * @param productId ID товара
      * @return ответ бота
      */
-    private BotApiMethod<?> handleEditProduct(Long chatId, String callbackData) {
-        Long productId = Long.parseLong(callbackData.replace("edit_product_", ""));
+    private BotApiMethod<?> handleEditProduct(Long chatId, Integer messageId, Long productId) {
         Optional<Product> productOpt = productService.getProductById(productId);
         
         if (productOpt.isEmpty()) {
@@ -160,13 +322,6 @@ public class AdminCallbackHandler implements UpdateHandler {
         }
         
         Product product = productOpt.get();
-        
-        // Устанавливаем состояние пользователя для редактирования товара
-        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
-        if (user != null) {
-            user.setState("EDITING_PRODUCT_" + productId);
-            telegramUserRepository.save(user);
-        }
         
         StringBuilder messageText = new StringBuilder();
         messageText.append("✏️ *Редактирование товара*\n\n");
@@ -193,11 +348,10 @@ public class AdminCallbackHandler implements UpdateHandler {
      * Обрабатывает нажатие кнопки "Удалить товар" с использованием EditMessageText
      * @param chatId ID чата
      * @param messageId ID сообщения
-     * @param callbackData данные callback
+     * @param productId ID товара
      * @return ответ бота
      */
-    private BotApiMethod<?> handleDeleteProduct(Long chatId, Integer messageId, String callbackData) {
-        Long productId = Long.parseLong(callbackData.replace("delete_product_", ""));
+    private BotApiMethod<?> handleDeleteProduct(Long chatId, Integer messageId, Long productId) {
         boolean deleted = productService.deleteProduct(productId);
         
         // Вместо редактирования сообщения, отправим новое сообщение
@@ -229,11 +383,10 @@ public class AdminCallbackHandler implements UpdateHandler {
     /**
      * Обрабатывает нажатие кнопки "Удалить товар" с использованием SendMessage
      * @param chatId ID чата
-     * @param callbackData данные callback
+     * @param productId ID товара
      * @return ответ бота
      */
-    private BotApiMethod<?> handleDeleteProduct(Long chatId, String callbackData) {
-        Long productId = Long.parseLong(callbackData.replace("delete_product_", ""));
+    private BotApiMethod<?> handleDeleteProduct(Long chatId, Long productId) {
         boolean deleted = productService.deleteProduct(productId);
         
         SendMessage sendMessage = new SendMessage();
@@ -254,22 +407,15 @@ public class AdminCallbackHandler implements UpdateHandler {
     /**
      * Обрабатывает нажатие кнопки "Редактировать категорию"
      * @param chatId ID чата
-     * @param callbackData данные callback
+     * @param messageId ID сообщения
+     * @param categoryId ID категории
      * @return ответ бота
      */
-    private BotApiMethod<?> handleEditCategory(Long chatId, String callbackData) {
-        Long categoryId = Long.parseLong(callbackData.replace("edit_category_", ""));
+    private BotApiMethod<?> handleEditCategory(Long chatId, Integer messageId, Long categoryId) {
         Optional<Category> categoryOpt = categoryService.getCategoryById(categoryId);
         
         if (categoryOpt.isEmpty()) {
             return createTextMessage(chatId, "Категория не найдена.");
-        }
-        
-        // Устанавливаем состояние пользователя для редактирования категории
-        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
-        if (user != null) {
-            user.setState("EDITING_CATEGORY_" + categoryId);
-            telegramUserRepository.save(user);
         }
         
         Category category = categoryOpt.get();
@@ -293,13 +439,10 @@ public class AdminCallbackHandler implements UpdateHandler {
      * Обрабатывает нажатие кнопки "Удалить категорию" с использованием EditMessageText
      * @param chatId ID чата
      * @param messageId ID сообщения
-     * @param callbackData данные callback
+     * @param categoryId ID категории
      * @return ответ бота
      */
-    private BotApiMethod<?> handleDeleteCategory(Long chatId, Integer messageId, String callbackData) {
-        Long categoryId = Long.parseLong(callbackData.replace("delete_category_", ""));
-        
-        // Получаем категорию
+    private BotApiMethod<?> handleDeleteCategory(Long chatId, Integer messageId, Long categoryId) {
         Optional<Category> categoryOpt = categoryService.getCategoryById(categoryId);
         if (categoryOpt.isEmpty()) {
             // Если категория не найдена, отправляем сообщение об ошибке
@@ -343,60 +486,6 @@ public class AdminCallbackHandler implements UpdateHandler {
         editMessageText.setReplyMarkup(keyboardMarkup);
         
         return editMessageText;
-    }
-    
-    /**
-     * Обрабатывает нажатие кнопки "Удалить категорию" с использованием SendMessage
-     * @param chatId ID чата
-     * @param callbackData данные callback
-     * @return ответ бота
-     */
-    private BotApiMethod<?> handleDeleteCategory(Long chatId, String callbackData) {
-        Long categoryId = Long.parseLong(callbackData.replace("delete_category_", ""));
-        
-        // Получаем категорию
-        Optional<Category> categoryOpt = categoryService.getCategoryById(categoryId);
-        if (categoryOpt.isEmpty()) {
-            // Если категория не найдена, отправляем сообщение об ошибке
-            SendMessage sendMessage = new SendMessage();
-            sendMessage.setChatId(chatId);
-            sendMessage.setText("❌ Категория не найдена. Возможно, она уже была удалена.");
-            sendMessage.setReplyMarkup(keyboardFactory.createAdminPanelKeyboard());
-            
-            return sendMessage;
-        }
-        
-        Category category = categoryOpt.get();
-        
-        // Создаем сообщение с запросом подтверждения
-        SendMessage sendMessage = new SendMessage();
-        sendMessage.setChatId(chatId);
-        sendMessage.setText("❓ Вы действительно хотите удалить категорию \"*" + category.getName() + "*\"?");
-        sendMessage.setParseMode("Markdown");
-        
-        // Создаем клавиатуру с кнопками подтверждения и отмены
-        InlineKeyboardMarkup keyboardMarkup = new InlineKeyboardMarkup();
-        List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
-        
-        // Кнопки подтверждения и отмены
-        List<InlineKeyboardButton> row = new ArrayList<>();
-        
-        InlineKeyboardButton confirmButton = new InlineKeyboardButton();
-        confirmButton.setText("✅ Да, удалить");
-        confirmButton.setCallbackData("confirm_delete_category_" + categoryId);
-        row.add(confirmButton);
-        
-        InlineKeyboardButton cancelButton = new InlineKeyboardButton();
-        cancelButton.setText("❌ Отмена");
-        cancelButton.setCallbackData("categories_page_1"); // Возвращаемся к списку категорий
-        row.add(cancelButton);
-        
-        keyboard.add(row);
-        keyboardMarkup.setKeyboard(keyboard);
-        
-        sendMessage.setReplyMarkup(keyboardMarkup);
-        
-        return sendMessage;
     }
     
     /**
@@ -716,22 +805,6 @@ public class AdminCallbackHandler implements UpdateHandler {
     }
     
     /**
-     * Обрабатывает нажатие кнопки "Назад в админ-панель"
-     * @param chatId ID чата
-     * @return ответ бота
-     */
-    private BotApiMethod<?> handleBackToAdmin(Long chatId) {
-        SendMessage sendMessage = new SendMessage();
-        sendMessage.setChatId(chatId);
-        sendMessage.setText("⚙️ *Панель администратора*\n\n" +
-                "Выберите действие из меню ниже:");
-        sendMessage.setParseMode("Markdown");
-        sendMessage.setReplyMarkup(keyboardFactory.createAdminPanelKeyboard());
-        
-        return sendMessage;
-    }
-    
-    /**
      * Создает объект текстового сообщения
      * @param chatId ID чата
      * @param text текст сообщения
@@ -748,11 +821,10 @@ public class AdminCallbackHandler implements UpdateHandler {
      * Обрабатывает подтверждение удаления категории с использованием EditMessageText
      * @param chatId ID чата
      * @param messageId ID сообщения
-     * @param callbackData данные callback
+     * @param categoryId ID категории
      * @return ответ бота
      */
-    private BotApiMethod<?> handleConfirmDeleteCategory(Long chatId, Integer messageId, String callbackData) {
-        Long categoryId = Long.parseLong(callbackData.replace("confirm_delete_category_", ""));
+    private BotApiMethod<?> handleConfirmDeleteCategory(Long chatId, Integer messageId, Long categoryId) {
         boolean deleted = categoryService.deleteCategory(categoryId);
         
         // Вместо редактирования сообщения, отправим новое сообщение
@@ -784,11 +856,10 @@ public class AdminCallbackHandler implements UpdateHandler {
     /**
      * Обрабатывает подтверждение удаления категории с использованием SendMessage
      * @param chatId ID чата
-     * @param callbackData данные callback
+     * @param categoryId ID категории
      * @return ответ бота
      */
-    private BotApiMethod<?> handleConfirmDeleteCategory(Long chatId, String callbackData) {
-        Long categoryId = Long.parseLong(callbackData.replace("confirm_delete_category_", ""));
+    private BotApiMethod<?> handleConfirmDeleteCategory(Long chatId, Long categoryId) {
         boolean deleted = categoryService.deleteCategory(categoryId);
         
         SendMessage sendMessage = new SendMessage();
@@ -804,5 +875,152 @@ public class AdminCallbackHandler implements UpdateHandler {
         sendMessage.setReplyMarkup(keyboardFactory.createAdminPanelKeyboard());
         
         return sendMessage;
+    }
+
+    /**
+     * Обрабатывает нажатие кнопки "Редактировать товар" с использованием SendMessage
+     * @param chatId ID чата
+     * @param productId ID товара
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleEditProduct(Long chatId, Long productId) {
+        Optional<Product> productOpt = productService.getProductById(productId);
+        
+        if (productOpt.isEmpty()) {
+            return createTextMessage(chatId, "Товар не найден.");
+        }
+        
+        Product product = productOpt.get();
+        
+        StringBuilder messageText = new StringBuilder();
+        messageText.append("✏️ *Редактирование товара*\n\n");
+        messageText.append("*Текущие данные:*\n");
+        messageText.append("Название: ").append(product.getName()).append("\n");
+        messageText.append("Описание: ").append(product.getDescription()).append("\n");
+        messageText.append("Цена: ").append(product.getPrice()).append("\n");
+        messageText.append("Остаток: ").append(product.getStock()).append("\n");
+        messageText.append("Категория: ").append(product.getCategory().getName()).append("\n\n");
+        messageText.append("Введите новые данные товара в формате:\n");
+        messageText.append("*Название|Описание|Цена|Остаток|ID_категории*\n\n");
+        messageText.append("Например: `Ноутбук Dell XPS 13|Мощный и легкий ноутбук|95000|10|3`\n\n");
+        messageText.append("Если вы хотите оставить какое-то поле без изменений, введите его текущее значение.");
+        
+        SendMessage sendMessage = new SendMessage();
+        sendMessage.setChatId(chatId);
+        sendMessage.setText(messageText.toString());
+        sendMessage.setParseMode("Markdown");
+        
+        return sendMessage;
+    }
+
+    /**
+     * Обрабатывает нажатие кнопки "Редактировать категорию" с использованием SendMessage
+     * @param chatId ID чата
+     * @param categoryId ID категории
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleEditCategory(Long chatId, Long categoryId) {
+        Optional<Category> categoryOpt = categoryService.getCategoryById(categoryId);
+        
+        if (categoryOpt.isEmpty()) {
+            return createTextMessage(chatId, "Категория не найдена.");
+        }
+        
+        Category category = categoryOpt.get();
+        
+        StringBuilder messageText = new StringBuilder();
+        messageText.append("✏️ *Редактирование категории*\n\n");
+        messageText.append("*Текущие данные:*\n");
+        messageText.append("Название: ").append(category.getName()).append("\n");
+        if (category.getDescription() != null) {
+            messageText.append("Описание: ").append(category.getDescription()).append("\n");
+        }
+        messageText.append("Родительская категория: ");
+        if (category.getParent() != null) {
+            messageText.append(category.getParent().getName()).append(" (ID: ").append(category.getParent().getId()).append(")");
+        } else {
+            messageText.append("Нет (основная категория)");
+        }
+        messageText.append("\n\n");
+        messageText.append("Введите новые данные категории в формате:\n");
+        messageText.append("*Название|Описание|ID_родительской_категории*\n\n");
+        messageText.append("Например: `Смартфоны|Мобильные телефоны|1`\n\n");
+        messageText.append("Если вы хотите оставить поле без изменений, введите его текущее значение.\n");
+        messageText.append("Если родительской категории нет (основная категория), введите 0 в поле ID_родительской_категории.");
+        
+        SendMessage sendMessage = new SendMessage();
+        sendMessage.setChatId(chatId);
+        sendMessage.setText(messageText.toString());
+        sendMessage.setParseMode("Markdown");
+        
+        return sendMessage;
+    }
+
+    /**
+     * Обрабатывает нажатие кнопки "Удалить категорию" с использованием SendMessage
+     * @param chatId ID чата
+     * @param categoryId ID категории
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleDeleteCategory(Long chatId, Long categoryId) {
+        // Получаем категорию
+        Optional<Category> categoryOpt = categoryService.getCategoryById(categoryId);
+        if (categoryOpt.isEmpty()) {
+            // Если категория не найдена, отправляем сообщение об ошибке
+            SendMessage sendMessage = new SendMessage();
+            sendMessage.setChatId(chatId);
+            sendMessage.setText("❌ Категория не найдена. Возможно, она уже была удалена.");
+            sendMessage.setReplyMarkup(keyboardFactory.createAdminPanelKeyboard());
+            
+            return sendMessage;
+        }
+        
+        Category category = categoryOpt.get();
+        
+        // Создаем сообщение с запросом подтверждения
+        SendMessage sendMessage = new SendMessage();
+        sendMessage.setChatId(chatId);
+        sendMessage.setText("❓ Вы действительно хотите удалить категорию \"*" + category.getName() + "*\"?");
+        sendMessage.setParseMode("Markdown");
+        
+        // Создаем клавиатуру с кнопками подтверждения и отмены
+        InlineKeyboardMarkup keyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
+        
+        // Кнопки подтверждения и отмены
+        List<InlineKeyboardButton> row = new ArrayList<>();
+        
+        InlineKeyboardButton confirmButton = new InlineKeyboardButton();
+        confirmButton.setText("✅ Да, удалить");
+        confirmButton.setCallbackData("confirm_delete_category_" + categoryId);
+        row.add(confirmButton);
+        
+        InlineKeyboardButton cancelButton = new InlineKeyboardButton();
+        cancelButton.setText("❌ Отмена");
+        cancelButton.setCallbackData("categories_page_1"); // Возвращаемся к списку категорий
+        row.add(cancelButton);
+        
+        keyboard.add(row);
+        keyboardMarkup.setKeyboard(keyboard);
+        
+        sendMessage.setReplyMarkup(keyboardMarkup);
+        
+        return sendMessage;
+    }
+
+    /**
+     * Обрабатывает ошибку с редактированием сообщения
+     * @param chatId ID чата
+     * @param messageId ID сообщения
+     * @param errorText текст ошибки
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleErrorWithEdit(Long chatId, Integer messageId, String errorText) {
+        EditMessageText editMessageText = new EditMessageText();
+        editMessageText.setChatId(chatId);
+        editMessageText.setMessageId(messageId);
+        editMessageText.setText("❌ " + errorText);
+        
+        return editMessageText;
     }
 } 
