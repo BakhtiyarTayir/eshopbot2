@@ -86,6 +86,7 @@ public class AdminCallbackHandler implements UpdateHandler {
                callbackData.startsWith("delete_product_") ||
                callbackData.startsWith("edit_category_") ||
                callbackData.startsWith("delete_category_") ||
+               callbackData.startsWith("edit_shop_") ||
                callbackData.startsWith("change_user_role") ||
                callbackData.equals("add_manager") ||
                callbackData.equals("back_to_admin");
@@ -153,7 +154,7 @@ public class AdminCallbackHandler implements UpdateHandler {
             } else if (callbackData.startsWith("users_page_")) {
                 return handleUsersPage(chatId, messageId, callbackData);
             } else if (callbackData.equals("shop_settings")) {
-                return createTextMessage(chatId, "Настройки магазина временно недоступны.");
+                return handleShopSettings(chatId, messageId);
             } else if (callbackData.equals("edit_shop_contacts")) {
                 return handleEditShopSettings(chatId, messageId, callbackData);
             } else if (callbackData.equals("edit_shop_hours")) {
@@ -168,6 +169,9 @@ public class AdminCallbackHandler implements UpdateHandler {
                 return handleChangeUserRole(chatId, messageId);
             } else if (callbackData.equals("add_manager")) {
                 return handleAddManager(chatId, messageId);
+            } else if (callbackData.startsWith("confirm_delete_category_")) {
+                Long categoryId = Long.parseLong(callbackData.replace("confirm_delete_category_", ""));
+                return handleConfirmDeleteCategory(chatId, messageId, categoryId);
             }
             
             return null;
@@ -210,6 +214,9 @@ public class AdminCallbackHandler implements UpdateHandler {
                         "Например: `+7 (999) 123-45-67|info@example.com|www.example.com`");
                 editMessage.setParseMode("Markdown");
                 
+                // Добавляем кнопку отмены
+                addCancelButton(editMessage);
+                
                 // Отправляем сообщение
                 return editMessage;
                 
@@ -227,6 +234,9 @@ public class AdminCallbackHandler implements UpdateHandler {
                         supportSettings.getSupportInfo() + "\n\n" +
                         "Введите новое сообщение поддержки:");
                 supportMessage.setParseMode("Markdown");
+                
+                // Добавляем кнопку отмены
+                addCancelButton(supportMessage);
                 
                 // Отправляем сообщение
                 return supportMessage;
@@ -246,6 +256,9 @@ public class AdminCallbackHandler implements UpdateHandler {
                         "Введите новую информацию о магазине:");
                 aboutMessage.setParseMode("Markdown");
                 
+                // Добавляем кнопку отмены
+                addCancelButton(aboutMessage);
+                
                 // Отправляем сообщение
                 return aboutMessage;
                 
@@ -264,6 +277,9 @@ public class AdminCallbackHandler implements UpdateHandler {
                         "Введите новый режим работы (используйте \\n для переноса строки):");
                 hoursMessage.setParseMode("Markdown");
                 
+                // Добавляем кнопку отмены
+                addCancelButton(hoursMessage);
+                
                 // Отправляем сообщение
                 return hoursMessage;
                 
@@ -271,6 +287,23 @@ public class AdminCallbackHandler implements UpdateHandler {
                 logger.warn("Unknown shop settings callback: {}", callbackData);
                 return createTextMessage(chatId, "Неизвестная команда");
         }
+    }
+    
+    /**
+     * Добавляет кнопку отмены редактирования к сообщению
+     * @param message сообщение, к которому нужно добавить кнопку
+     */
+    private void addCancelButton(EditMessageText message) {
+        InlineKeyboardMarkup cancelKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> cancelButtons = new ArrayList<>();
+        List<InlineKeyboardButton> cancelRow = new ArrayList<>();
+        InlineKeyboardButton cancelButton = new InlineKeyboardButton();
+        cancelButton.setText("❌ Отмена редактирования");
+        cancelButton.setCallbackData("shop_settings");
+        cancelRow.add(cancelButton);
+        cancelButtons.add(cancelRow);
+        cancelKeyboard.setKeyboard(cancelButtons);
+        message.setReplyMarkup(cancelKeyboard);
     }
     
     /**
@@ -415,6 +448,14 @@ public class AdminCallbackHandler implements UpdateHandler {
         }
         
         Category category = categoryOpt.get();
+        
+        // Сохраняем ID категории в состоянии пользователя
+        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+        if (user != null) {
+            user.setState("EDITING_CATEGORY_NAME");
+            user.setTempData(categoryId.toString()); // Сохраняем ID редактируемой категории
+            telegramUserRepository.save(user);
+        }
         
         StringBuilder messageText = new StringBuilder();
         messageText.append("✏️ *Редактирование категории*\n\n");
@@ -1147,4 +1188,92 @@ public class AdminCallbackHandler implements UpdateHandler {
         
         return editMessage;
     }
-} 
+
+    /**
+     * Обрабатывает настройки магазина
+     * @param chatId ID чата
+     * @param messageId ID сообщения
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleShopSettings(Long chatId, Integer messageId) {
+        // Получаем текущие настройки магазина
+        ShopSettings settings = shopSettingsService.getShopSettings();
+        
+        // Сбрасываем состояние пользователя при возврате к настройкам магазина
+        // Это нужно для корректной работы кнопки "Отмена редактирования"
+        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+        if (user != null) {
+            user.setState(null);
+            user.setTempData(null);
+            telegramUserRepository.save(user);
+        }
+        
+        // Формируем сообщение
+        StringBuilder messageText = new StringBuilder();
+        messageText.append("⚙️ *Настройки магазина*\n\n");
+        messageText.append("*Текущие настройки:*\n\n");
+        messageText.append("📞 *Телефон:* ").append(settings.getPhone()).append("\n");
+        messageText.append("📧 *Email:* ").append(settings.getEmail()).append("\n");
+        messageText.append("🌐 *Сайт:* ").append(settings.getWebsite()).append("\n\n");
+        messageText.append("*Сообщение поддержки:*\n").append(settings.getSupportInfo()).append("\n\n");
+        messageText.append("*Информация о магазине:*\n").append(settings.getAboutInfo()).append("\n\n");
+        messageText.append("*Режим работы:*\n").append(settings.getWorkingHours()).append("\n\n");
+        messageText.append("Выберите, что хотите изменить:");
+        
+        // Создаем клавиатуру для выбора настроек
+        InlineKeyboardMarkup keyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
+        
+        // Кнопка изменения контактной информации
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        InlineKeyboardButton contactsButton = new InlineKeyboardButton();
+        contactsButton.setText("📞 Изменить контактную информацию");
+        contactsButton.setCallbackData("edit_shop_contacts");
+        row1.add(contactsButton);
+        keyboard.add(row1);
+        
+        // Кнопка изменения сообщения поддержки
+        List<InlineKeyboardButton> row2 = new ArrayList<>();
+        InlineKeyboardButton supportButton = new InlineKeyboardButton();
+        supportButton.setText("❓ Изменить сообщение поддержки");
+        supportButton.setCallbackData("edit_shop_support");
+        row2.add(supportButton);
+        keyboard.add(row2);
+        
+        // Кнопка изменения информации о магазине
+        List<InlineKeyboardButton> row3 = new ArrayList<>();
+        InlineKeyboardButton aboutButton = new InlineKeyboardButton();
+        aboutButton.setText("ℹ️ Изменить информацию о магазине");
+        aboutButton.setCallbackData("edit_shop_about");
+        row3.add(aboutButton);
+        keyboard.add(row3);
+        
+        // Кнопка изменения режима работы
+        List<InlineKeyboardButton> row4 = new ArrayList<>();
+        InlineKeyboardButton workingHoursButton = new InlineKeyboardButton();
+        workingHoursButton.setText("🕒 Изменить режим работы");
+        workingHoursButton.setCallbackData("edit_shop_hours");
+        row4.add(workingHoursButton);
+        keyboard.add(row4);
+        
+        // Кнопка возврата в админ-панель
+        List<InlineKeyboardButton> row5 = new ArrayList<>();
+        InlineKeyboardButton backButton = new InlineKeyboardButton();
+        backButton.setText("⬅️ Назад");
+        backButton.setCallbackData("back_to_admin");
+        row5.add(backButton);
+        keyboard.add(row5);
+        
+        keyboardMarkup.setKeyboard(keyboard);
+        
+        // Отправляем сообщение
+        EditMessageText editMessage = new EditMessageText();
+        editMessage.setChatId(chatId);
+        editMessage.setMessageId(messageId);
+        editMessage.setText(messageText.toString());
+        editMessage.setParseMode("Markdown");
+        editMessage.setReplyMarkup(keyboardMarkup);
+        
+        return editMessage;
+    }
+}

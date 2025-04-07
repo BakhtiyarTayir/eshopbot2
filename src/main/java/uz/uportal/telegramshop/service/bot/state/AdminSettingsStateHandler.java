@@ -70,6 +70,14 @@ public class AdminSettingsStateHandler implements StateHandler {
             telegramUserRepository.save(user);
             return createTextMessage(chatId, "У вас нет доступа к административным функциям.");
         }
+
+        // Проверяем, хочет ли пользователь отменить редактирование
+        if (text.equalsIgnoreCase("отмена") || text.equalsIgnoreCase("отмена редактирования") || 
+            text.equalsIgnoreCase("cancel") || text.equals("❌")) {
+            user.setState(null);
+            telegramUserRepository.save(user);
+            return createTextMessage(chatId, "✅ Редактирование отменено. Вернитесь в меню настроек магазина.");
+        }
         
         switch (state) {
             case "EDITING_SHOP_CONTACTS":

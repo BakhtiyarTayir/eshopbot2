@@ -68,6 +68,7 @@ public class CategoryStateHandler implements UpdateHandler {
                 state.equals("ADDING_CATEGORY_NAME") ||
                 state.equals("ADDING_CATEGORY_DESCRIPTION") ||
                 state.equals("ADDING_CATEGORY_PARENT_SELECTION") ||
+                state.equals("EDITING_CATEGORY_NAME") ||
                 state.startsWith("EDITING_CATEGORY_") ||
                 state.startsWith("EDITING_CATEGORY_DESCRIPTION_");
     }
@@ -96,6 +97,15 @@ public class CategoryStateHandler implements UpdateHandler {
             return handleAddingCategoryDescription(chatId, text);
         } else if (state.equals("ADDING_CATEGORY_PARENT_SELECTION")) {
             return handleAddingCategoryParentSelection(chatId, text);
+        } else if (state.equals("EDITING_CATEGORY_NAME")) {
+            // Получаем ID категории из временных данных
+            String categoryIdStr = user.getTempData();
+            if (categoryIdStr == null || categoryIdStr.isEmpty()) {
+                return createTextMessage(chatId, "Произошла ошибка. Пожалуйста, начните редактирование категории заново.");
+            }
+            
+            Long categoryId = Long.parseLong(categoryIdStr);
+            return handleEditingCategoryName(chatId, text, categoryId);
         } else {
             // Проверяем, является ли состояние редактированием категории
             Matcher matcher = EDITING_CATEGORY_PATTERN.matcher(state);
