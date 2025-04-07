@@ -37,3 +37,5 @@ Dockerfile
 application-prod.properties
 application-dev.properties
 application.properties
+data/
+temp.txt

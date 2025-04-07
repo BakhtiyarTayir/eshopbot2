@@ -86,7 +86,7 @@ public class KeyboardFactoryImpl implements KeyboardFactory {
             backButton.setCallbackData("catalog_back_to_parent_" + parentCategory.getParent().getId());
         } else {
             backButton.setText("⬅️ Назад к категориям");
-            backButton.setCallbackData("catalog_back_to_parent_0");
+            backButton.setCallbackData("catalog_categories");
         }
         
         backRow.add(backButton);
