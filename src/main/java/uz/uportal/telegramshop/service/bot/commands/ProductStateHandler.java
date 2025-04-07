@@ -1071,36 +1071,52 @@ public class ProductStateHandler implements StateHandler {
             }
         }
         
-        // Получаем fileId изображения
-        String fileId = message.getPhoto().get(message.getPhoto().size() - 1).getFileId();
-        
-        // Обновляем изображение товара
-        product.setImageUrl(fileId);
-        productDrafts.put(chatId, product);
-        
-        // Возвращаемся к выбору поля для редактирования
-        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
-        if (user != null) {
-            user.setState("EDITING_PRODUCT_" + product.getId());
-            telegramUserRepository.save(user);
+        try {
+            // Получаем fileId изображения
+            String fileId = message.getPhoto().get(message.getPhoto().size() - 1).getFileId();
+            logger.info("Получен fileId изображения: {}", fileId);
+            
+            // Обновляем изображение товара в базе данных напрямую
+            Product updatedProduct = productService.updateProductImage(product.getId(), fileId);
+            
+            if (updatedProduct == null) {
+                logger.error("Не удалось обновить изображение товара с ID {}", product.getId());
+                return createTextMessage(chatId, "Произошла ошибка при обновлении изображения товара. Пожалуйста, попробуйте снова.");
+            }
+            
+            // Обновляем черновик товара
+            product.setImageUrl(fileId);
+            productDrafts.put(chatId, product);
+            
+            logger.info("Изображение товара '{}' успешно обновлено", product.getName());
+            
+            // Возвращаемся к выбору поля для редактирования
+            TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+            if (user != null) {
+                user.setState("EDITING_PRODUCT_" + product.getId());
+                telegramUserRepository.save(user);
+            }
+            
+            // Отправляем сообщение с текущими данными товара и предлагаем выбрать, что редактировать
+            StringBuilder messageText = new StringBuilder();
+            messageText.append("✏️ *Редактирование товара*\n\n");
+            messageText.append("Изображение товара успешно изменено!\n\n");
+            messageText.append("Выберите, что вы хотите изменить:\n\n");
+            messageText.append("1. Название: ").append(product.getName()).append("\n");
+            messageText.append("2. Цена: ").append(product.getPrice()).append(" руб.\n");
+            messageText.append("3. Количество: ").append(product.getStock()).append(" шт.\n");
+            messageText.append("4. Категория: ").append(product.getCategory() != null ? product.getCategory().getName() : "Не указана").append("\n");
+            messageText.append("5. Описание: ").append(product.getDescription()).append("\n");
+            messageText.append("6. Изображение\n");
+            messageText.append("7. Удалить товар\n");
+            messageText.append("8. Сохранить и выйти\n\n");
+            messageText.append("Введите номер поля, которое хотите изменить, или 8 для сохранения и выхода:");
+            
+            return createTextMessage(chatId, messageText.toString());
+        } catch (Exception e) {
+            logger.error("Ошибка при обработке изображения товара: {}", e.getMessage(), e);
+            return createTextMessage(chatId, "Произошла ошибка при обработке изображения. Пожалуйста, попробуйте снова.");
         }
-        
-        // Отправляем сообщение с текущими данными товара и предлагаем выбрать, что редактировать
-        StringBuilder messageText = new StringBuilder();
-        messageText.append("✏️ *Редактирование товара*\n\n");
-        messageText.append("Изображение товара успешно изменено!\n\n");
-        messageText.append("Выберите, что вы хотите изменить:\n\n");
-        messageText.append("1. Название: ").append(product.getName()).append("\n");
-        messageText.append("2. Цена: ").append(product.getPrice()).append(" руб.\n");
-        messageText.append("3. Количество: ").append(product.getStock()).append(" шт.\n");
-        messageText.append("4. Категория: ").append(product.getCategory() != null ? product.getCategory().getName() : "Не указана").append("\n");
-        messageText.append("5. Описание: ").append(product.getDescription()).append("\n");
-        messageText.append("6. Изображение\n");
-        messageText.append("7. Удалить товар\n");
-        messageText.append("8. Сохранить и выйти\n\n");
-        messageText.append("Введите номер поля, которое хотите изменить, или 8 для сохранения и выхода:");
-        
-        return createTextMessage(chatId, messageText.toString());
     }
     
     /**
