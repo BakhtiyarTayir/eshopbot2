@@ -23,6 +23,13 @@ public class Category {
     @OneToMany(mappedBy = "category", cascade = CascadeType.ALL)
     private List<Product> products = new ArrayList<>();
     
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private Category parent;
+    
+    @OneToMany(mappedBy = "parent", cascade = CascadeType.ALL)
+    private List<Category> subcategories = new ArrayList<>();
+    
     // Конструкторы, геттеры и сеттеры
     
     public Category() {
@@ -36,6 +43,13 @@ public class Category {
     public Category(String name, String description) {
         this.name = name;
         this.description = description;
+        this.slug = generateSlug(name);
+    }
+    
+    public Category(String name, String description, Category parent) {
+        this.name = name;
+        this.description = description;
+        this.parent = parent;
         this.slug = generateSlug(name);
     }
     
@@ -83,5 +97,29 @@ public class Category {
     
     public void setProducts(List<Product> products) {
         this.products = products;
+    }
+    
+    public Category getParent() {
+        return parent;
+    }
+    
+    public void setParent(Category parent) {
+        this.parent = parent;
+    }
+    
+    public List<Category> getSubcategories() {
+        return subcategories;
+    }
+    
+    public void setSubcategories(List<Category> subcategories) {
+        this.subcategories = subcategories;
+    }
+    
+    public boolean hasSubcategories() {
+        return subcategories != null && !subcategories.isEmpty();
+    }
+    
+    public boolean isMainCategory() {
+        return parent == null;
     }
 } 

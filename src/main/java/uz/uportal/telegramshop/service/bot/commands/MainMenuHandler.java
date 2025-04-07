@@ -100,7 +100,7 @@ public class MainMenuHandler implements UpdateHandler {
      * @return ответ бота
      */
     private BotApiMethod<?> handleCatalog(Long chatId) {
-        List<Category> categories = categoryService.getAllCategories();
+        List<Category> categories = categoryService.getMainCategories();
         
         SendMessage sendMessage = new SendMessage();
         sendMessage.setChatId(chatId);

@@ -35,6 +35,23 @@ public class CategoryService {
     }
     
     /**
+     * Получить все основные категории (без родительской категории)
+     * @return список основных категорий
+     */
+    public List<Category> getMainCategories() {
+        return categoryRepository.findByParentIsNull();
+    }
+    
+    /**
+     * Получить подкатегории для указанной родительской категории
+     * @param parentId ID родительской категории
+     * @return список подкатегорий
+     */
+    public List<Category> getSubcategories(Long parentId) {
+        return categoryRepository.findByParentId(parentId);
+    }
+    
+    /**
      * Получить все категории с пагинацией
      * @param pageable параметры пагинации
      * @return страница категорий
@@ -71,6 +88,25 @@ public class CategoryService {
     }
     
     /**
+     * Создать новую подкатегорию
+     * @param name название подкатегории
+     * @param description описание подкатегории
+     * @param parentId ID родительской категории
+     * @return созданная подкатегория или null, если родительская категория не найдена
+     */
+    @Transactional
+    public Category createSubcategory(String name, String description, Long parentId) {
+        Optional<Category> parentOpt = categoryRepository.findById(parentId);
+        if (parentOpt.isEmpty()) {
+            return null;
+        }
+        
+        Category parent = parentOpt.get();
+        Category subcategory = new Category(name, description, parent);
+        return categoryRepository.save(subcategory);
+    }
+    
+    /**
      * Обновить категорию
      * @param id ID категории
      * @param name новое название категории
@@ -87,6 +123,34 @@ public class CategoryService {
         Category category = categoryOpt.get();
         category.setName(name);
         category.setDescription(description);
+        
+        return categoryRepository.save(category);
+    }
+    
+    /**
+     * Обновить родительскую категорию для подкатегории
+     * @param id ID категории
+     * @param parentId ID новой родительской категории (null для превращения в основную категорию)
+     * @return обновленная категория или null, если категория не найдена
+     */
+    @Transactional
+    public Category updateCategoryParent(Long id, Long parentId) {
+        Optional<Category> categoryOpt = categoryRepository.findById(id);
+        if (categoryOpt.isEmpty()) {
+            return null;
+        }
+        
+        Category category = categoryOpt.get();
+        
+        if (parentId == null) {
+            category.setParent(null);
+        } else {
+            Optional<Category> parentOpt = categoryRepository.findById(parentId);
+            if (parentOpt.isEmpty()) {
+                return null;
+            }
+            category.setParent(parentOpt.get());
+        }
         
         return categoryRepository.save(category);
     }
@@ -124,5 +188,15 @@ public class CategoryService {
         Category category = categoryOpt.get();
         List<Product> products = productRepository.findByCategory(category);
         return !products.isEmpty();
+    }
+    
+    /**
+     * Проверяет, есть ли подкатегории у категории
+     * @param categoryId ID категории
+     * @return true, если у категории есть подкатегории, иначе false
+     */
+    public boolean categoryHasSubcategories(Long categoryId) {
+        List<Category> subcategories = getSubcategories(categoryId);
+        return !subcategories.isEmpty();
     }
 } 

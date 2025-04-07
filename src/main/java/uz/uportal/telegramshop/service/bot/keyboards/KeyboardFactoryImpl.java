@@ -62,6 +62,41 @@ public class KeyboardFactoryImpl implements KeyboardFactory {
     }
 
     @Override
+    public InlineKeyboardMarkup createSubcategoriesKeyboard(List<Category> subcategories, Category parentCategory) {
+        InlineKeyboardMarkup keyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
+        
+        // Добавляем кнопки подкатегорий
+        for (Category subcategory : subcategories) {
+            List<InlineKeyboardButton> row = new ArrayList<>();
+            InlineKeyboardButton button = new InlineKeyboardButton();
+            button.setText(subcategory.getName());
+            // Формат callback: catalog_subcategory_SUBCATEGORY_ID_PARENT_ID
+            button.setCallbackData("catalog_subcategory_" + subcategory.getId() + "_" + parentCategory.getId());
+            row.add(button);
+            keyboard.add(row);
+        }
+        
+        // Добавляем кнопку возврата к родительской категории или к главному каталогу
+        List<InlineKeyboardButton> backRow = new ArrayList<>();
+        InlineKeyboardButton backButton = new InlineKeyboardButton();
+        
+        if (parentCategory.getParent() != null) {
+            backButton.setText("⬅️ Назад к " + parentCategory.getParent().getName());
+            backButton.setCallbackData("catalog_back_to_parent_" + parentCategory.getParent().getId());
+        } else {
+            backButton.setText("⬅️ Назад к категориям");
+            backButton.setCallbackData("catalog_back_to_parent_0");
+        }
+        
+        backRow.add(backButton);
+        keyboard.add(backRow);
+        
+        keyboardMarkup.setKeyboard(keyboard);
+        return keyboardMarkup;
+    }
+
+    @Override
     public InlineKeyboardMarkup createOrderConfirmationKeyboard() {
         InlineKeyboardMarkup keyboardMarkup = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
@@ -176,7 +211,7 @@ public class KeyboardFactoryImpl implements KeyboardFactory {
         row3.add("👥 Список пользователей");
         keyboard.add(row3);
         
-        // Четвертая строка - возврат в главное меню
+        // Четвертая строка
         KeyboardRow row4 = new KeyboardRow();
         row4.add("⬅️ Вернуться в главное меню");
         keyboard.add(row4);

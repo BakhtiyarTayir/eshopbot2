@@ -110,17 +110,17 @@ public class AdminPanelHandler implements UpdateHandler {
             case "📋 Список товаров":
                 return handleProductsList(chatId, 1);
             case "➕ Добавить товар":
-                return handleAddProduct(chatId);
+                return handleAddingProduct(chatId);
             case "🗂 Список категорий":
                 return handleCategoriesList(chatId, 1);
             case "➕ Добавить категорию":
-                return handleAddCategory(chatId);
+                return handleAddingCategory(chatId);
             case "📦 Управление заказами":
                 return handleOrdersManagement(chatId);
             case "👥 Список пользователей":
                 return handleUsersList(chatId, 1);
             case "⬅️ Вернуться в главное меню":
-                return handleBackToMainMenu(chatId, user);
+                return handleReturnToMainMenu(chatId);
             default:
                 // Проверяем по содержанию для кнопки "Список пользователей"
                 if (text.contains("Список пользователей")) {
@@ -236,7 +236,7 @@ public class AdminPanelHandler implements UpdateHandler {
      * @param chatId ID чата
      * @return ответ бота
      */
-    private BotApiMethod<?> handleAddProduct(Long chatId) {
+    private BotApiMethod<?> handleAddingProduct(Long chatId) {
         // Устанавливаем состояние пользователя для добавления товара
         TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
         if (user != null) {
@@ -292,19 +292,16 @@ public class AdminPanelHandler implements UpdateHandler {
      * @param chatId ID чата
      * @return ответ бота
      */
-    private BotApiMethod<?> handleAddCategory(Long chatId) {
-        // Устанавливаем состояние пользователя для добавления категории
+    private BotApiMethod<?> handleAddingCategory(Long chatId) {
+        // Устанавливаем состояние пользователя "добавление категории"
         TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
         if (user != null) {
-            user.setState("ADDING_CATEGORY_NAME");
+            user.setState("ADDING_CATEGORY");
             telegramUserRepository.save(user);
         }
         
-        SendMessage sendMessage = new SendMessage();
-        sendMessage.setChatId(chatId);
-        sendMessage.setText("Введите название категории:");
-        
-        return sendMessage;
+        // Отправляем сообщение с инструкцией
+        return createTextMessage(chatId, "Введите название новой категории:");
     }
     
     /**
@@ -462,16 +459,16 @@ public class AdminPanelHandler implements UpdateHandler {
     /**
      * Обрабатывает нажатие кнопки "Вернуться в главное меню"
      * @param chatId ID чата
-     * @param user пользователь
      * @return ответ бота
      */
-    private BotApiMethod<?> handleBackToMainMenu(Long chatId, TelegramUser user) {
+    private BotApiMethod<?> handleReturnToMainMenu(Long chatId) {
+        // Получаем пользователя
+        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+        boolean isAdminOrManager = user != null && (user.getRole().equals("ADMIN") || user.getRole().equals("MANAGER"));
+        
         SendMessage sendMessage = new SendMessage();
         sendMessage.setChatId(chatId);
         sendMessage.setText("Вы вернулись в главное меню.");
-        
-        // Проверяем, является ли пользователь админом или менеджером
-        boolean isAdminOrManager = "ADMIN".equals(user.getRole()) || "MANAGER".equals(user.getRole());
         sendMessage.setReplyMarkup(keyboardFactory.createMainMenuKeyboard(isAdminOrManager));
         
         return sendMessage;

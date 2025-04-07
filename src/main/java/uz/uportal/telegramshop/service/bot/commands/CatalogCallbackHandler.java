@@ -68,6 +68,7 @@ public class CatalogCallbackHandler implements UpdateHandler {
         
         String callbackData = update.getCallbackQuery().getData();
         return callbackData.startsWith("catalog_category_") || 
+               callbackData.startsWith("catalog_subcategory_") ||
                callbackData.startsWith("catalog_products_page_") ||
                callbackData.equals("catalog_categories") ||
                callbackData.equals("back_to_catalog");
@@ -96,19 +97,54 @@ public class CatalogCallbackHandler implements UpdateHandler {
         logger.info("Handling catalog callback: {} for chatId: {}", callbackData, chatId);
         
         try {
-            if (callbackData.startsWith("catalog_category_")) {
+            if (callbackData.equals("catalog_categories")) {
                 return messageId != null 
-                    ? handleCategoryProducts(chatId, messageId, callbackData)
-                    : handleCategoryProducts(chatId, callbackData);
+                    ? handleCatalogCategories(chatId, messageId)
+                    : handleCatalogCategories(chatId);
+            } else if (callbackData.startsWith("catalog_category_")) {
+                Long categoryId = Long.parseLong(callbackData.replace("catalog_category_", ""));
+                
+                // Сначала проверяем, есть ли у категории подкатегории
+                if (categoryService.categoryHasSubcategories(categoryId)) {
+                    return messageId != null 
+                        ? handleCategorySubcategories(chatId, messageId, categoryId)
+                        : handleCategorySubcategories(chatId, categoryId);
+                } else {
+                    // Если подкатегорий нет, показываем товары категории
+                    return messageId != null 
+                        ? handleCategoryProducts(chatId, messageId, callbackData)
+                        : handleCategoryProducts(chatId, callbackData);
+                }
+            } else if (callbackData.startsWith("catalog_subcategory_")) {
+                // Формат: catalog_subcategory_SUBCATEGORY_ID_PARENT_ID
+                String[] parts = callbackData.replace("catalog_subcategory_", "").split("_");
+                if (parts.length >= 2) {
+                    // Передаем ID подкатегории для отображения товаров
+                    logger.info("Processing subcategory with ID: {}", parts[0]);
+                    return messageId != null 
+                        ? handleCategoryProducts(chatId, messageId, "catalog_category_" + parts[0])
+                        : handleCategoryProducts(chatId, "catalog_category_" + parts[0]);
+                }
+                return createTextMessage(chatId, "Ошибка обработки подкатегории");
+            } else if (callbackData.startsWith("catalog_back_to_parent_")) {
+                // Возврат к родительской категории
+                Long parentId = Long.parseLong(callbackData.replace("catalog_back_to_parent_", ""));
+                
+                if (parentId == 0) {
+                    // Если родительский ID равен 0, возвращаемся к списку всех категорий
+                    return messageId != null 
+                        ? handleCatalogCategories(chatId, messageId)
+                        : handleCatalogCategories(chatId);
+                } else {
+                    return messageId != null 
+                        ? handleCategorySubcategories(chatId, messageId, parentId)
+                        : handleCategorySubcategories(chatId, parentId);
+                }
             } else if (callbackData.startsWith("catalog_products_page_")) {
                 // Формат: catalog_products_page_{categoryId}_{page}
                 return messageId != null 
                     ? handleProductsInCategoryPage(chatId, messageId, callbackData)
                     : handleProductsInCategoryPage(chatId, callbackData);
-            } else if (callbackData.equals("catalog_categories")) {
-                return messageId != null 
-                    ? handleCatalogCategories(chatId, messageId)
-                    : handleCatalogCategories(chatId);
             } else {
                 logger.warn("Unhandled catalog callback: {}", callbackData);
                 return null;
@@ -818,14 +854,93 @@ public class CatalogCallbackHandler implements UpdateHandler {
     }
     
     /**
+     * Обрабатывает показ подкатегорий категории
+     * @param chatId ID чата
+     * @param messageId ID сообщения
+     * @param categoryId ID категории
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleCategorySubcategories(Long chatId, Integer messageId, Long categoryId) {
+        // Получаем категорию
+        Optional<Category> categoryOpt = categoryService.getCategoryById(categoryId);
+        if (categoryOpt.isEmpty()) {
+            EditMessageText editMessageText = new EditMessageText();
+            editMessageText.setChatId(chatId);
+            editMessageText.setMessageId(messageId);
+            editMessageText.setText("Категория не найдена.");
+            return editMessageText;
+        }
+        
+        Category category = categoryOpt.get();
+        
+        // Получаем подкатегории
+        List<Category> subcategories = categoryService.getSubcategories(categoryId);
+        
+        // Формируем сообщение
+        StringBuilder messageText = new StringBuilder();
+        messageText.append("📋 *Подкатегории \"").append(category.getName()).append("\"*\n\n");
+        
+        // Создаем клавиатуру с подкатегориями
+        InlineKeyboardMarkup keyboardMarkup = keyboardFactory.createSubcategoriesKeyboard(subcategories, category);
+        
+        // Обновляем сообщение
+        EditMessageText editMessageText = new EditMessageText();
+        editMessageText.setChatId(chatId);
+        editMessageText.setMessageId(messageId);
+        editMessageText.setText(messageText.toString());
+        editMessageText.setParseMode("Markdown");
+        editMessageText.setReplyMarkup(keyboardMarkup);
+        
+        return editMessageText;
+    }
+    
+    /**
+     * Обрабатывает показ подкатегорий категории
+     * @param chatId ID чата
+     * @param categoryId ID категории
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleCategorySubcategories(Long chatId, Long categoryId) {
+        // Получаем категорию
+        Optional<Category> categoryOpt = categoryService.getCategoryById(categoryId);
+        if (categoryOpt.isEmpty()) {
+            SendMessage sendMessage = new SendMessage();
+            sendMessage.setChatId(chatId);
+            sendMessage.setText("Категория не найдена.");
+            return sendMessage;
+        }
+        
+        Category category = categoryOpt.get();
+        
+        // Получаем подкатегории
+        List<Category> subcategories = categoryService.getSubcategories(categoryId);
+        
+        // Формируем сообщение
+        StringBuilder messageText = new StringBuilder();
+        messageText.append("📋 *Подкатегории \"").append(category.getName()).append("\"*\n\n");
+        
+        // Создаем клавиатуру с подкатегориями
+        InlineKeyboardMarkup keyboardMarkup = keyboardFactory.createSubcategoriesKeyboard(subcategories, category);
+        
+        // Отправляем сообщение
+        SendMessage sendMessage = new SendMessage();
+        sendMessage.setChatId(chatId);
+        sendMessage.setText(messageText.toString());
+        sendMessage.setParseMode("Markdown");
+        sendMessage.setReplyMarkup(keyboardMarkup);
+        
+        return sendMessage;
+    }
+    
+    /**
      * Обрабатывает нажатие на кнопку "Назад к категориям" с использованием EditMessageText
      * @param chatId ID чата
      * @param messageId ID сообщения
      * @return ответ бота
      */
     private BotApiMethod<?> handleCatalogCategories(Long chatId, Integer messageId) {
-        // Получаем список категорий
-        List<Category> categories = categoryService.getAllCategories();
+        // Получаем список основных категорий (без родительской категории)
+        List<Category> categories = categoryService.getMainCategories();
         
         // Формируем сообщение
         StringBuilder messageText = new StringBuilder();
@@ -835,7 +950,7 @@ public class CatalogCallbackHandler implements UpdateHandler {
         // Создаем клавиатуру с категориями
         InlineKeyboardMarkup keyboardMarkup = keyboardFactory.createCatalogKeyboard(categories);
         
-        // Отправляем сообщение
+        // Обновляем сообщение
         EditMessageText editMessageText = new EditMessageText();
         editMessageText.setChatId(chatId);
         editMessageText.setMessageId(messageId);
@@ -852,8 +967,8 @@ public class CatalogCallbackHandler implements UpdateHandler {
      * @return ответ бота
      */
     private BotApiMethod<?> handleCatalogCategories(Long chatId) {
-        // Получаем список категорий
-        List<Category> categories = categoryService.getAllCategories();
+        // Получаем список основных категорий (без родительской категории)
+        List<Category> categories = categoryService.getMainCategories();
         
         // Формируем сообщение
         StringBuilder messageText = new StringBuilder();

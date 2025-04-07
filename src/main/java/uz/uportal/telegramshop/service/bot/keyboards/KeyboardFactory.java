@@ -25,6 +25,14 @@ public interface KeyboardFactory {
     InlineKeyboardMarkup createCatalogKeyboard(List<Category> categories);
     
     /**
+     * Создает клавиатуру подкатегорий для категории
+     * @param subcategories список подкатегорий
+     * @param parentCategory родительская категория
+     * @return клавиатура подкатегорий
+     */
+    InlineKeyboardMarkup createSubcategoriesKeyboard(List<Category> subcategories, Category parentCategory);
+    
+    /**
      * Создает клавиатуру для подтверждения заказа
      * @return клавиатура для подтверждения заказа
      */
