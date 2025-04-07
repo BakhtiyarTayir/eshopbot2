@@ -11,6 +11,7 @@ import uz.uportal.telegramshop.repository.OrderItemRepository;
 import uz.uportal.telegramshop.repository.OrderRepository;
 import uz.uportal.telegramshop.repository.ProductRepository;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -123,6 +124,9 @@ public class OrderService {
             // Сохраняем заказ
             order = orderRepository.save(order);
             
+            // Создаем список для хранения элементов заказа
+            List<OrderItem> orderItems = new ArrayList<>();
+            
             // Добавляем элементы заказа
             for (CartItem cartItem : cartItems) {
                 Product product = cartItem.getProduct();
@@ -137,16 +141,24 @@ public class OrderService {
                 // Создаем элемент заказа
                 OrderItem orderItem = new OrderItem(cartItem);
                 orderItem.setOrder(order);
-                orderItemRepository.save(orderItem);
+                orderItem = orderItemRepository.save(orderItem);
+                orderItems.add(orderItem);
                 
                 // Уменьшаем количество товара в наличии
                 product.setStock(product.getStock() - cartItem.getQuantity());
                 productRepository.save(product);
             }
             
+            // Убедимся, что все элементы заказа добавлены в объект заказа
+            order.setItems(orderItems);
+            
             // Пересчитываем общую сумму заказа
             order.recalculateTotalAmount();
-            orderRepository.save(order);
+            logger.info("Заказ #{} создан с {} элементами, общая сумма: {}", 
+                       order.getId(), order.getItems().size(), order.getTotalAmount());
+            
+            // Сохраняем заказ с обновленной суммой
+            order = orderRepository.save(order);
             
             // Очищаем корзину
             cartService.clearCart(user);
