@@ -356,6 +356,17 @@ public class AdminCallbackHandler implements UpdateHandler {
         
         Product product = productOpt.get();
         
+        // Устанавливаем состояние пользователя для редактирования товара
+        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+        if (user == null) {
+            user = new TelegramUser(chatId, null, "Unknown", "Unknown");
+            logger.warn("Пользователь с ID {} не найден, создан новый пользователь", chatId);
+        }
+        user.setState("EDITING_PRODUCT_" + productId);
+        telegramUserRepository.save(user);
+        
+        logger.info("Установлено состояние EDITING_PRODUCT_{} для пользователя {}", productId, chatId);
+        
         StringBuilder messageText = new StringBuilder();
         messageText.append("✏️ *Редактирование товара*\n\n");
         messageText.append("Выберите, что вы хотите изменить:\n\n");
