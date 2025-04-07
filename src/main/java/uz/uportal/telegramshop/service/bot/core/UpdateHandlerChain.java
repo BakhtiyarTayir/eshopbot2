@@ -37,6 +37,13 @@ public class UpdateHandlerChain {
     public BotApiMethod<?> handle(Update update) {
         logger.debug("Обработка обновления: {}", update);
         
+        // Если это callback-запрос, добавляем специальное логирование
+        if (update.hasCallbackQuery()) {
+            String callbackData = update.getCallbackQuery().getData();
+            Long chatId = update.getCallbackQuery().getMessage().getChatId();
+            logger.info("Получен callback-запрос: data='{}' от пользователя chatId={}", callbackData, chatId);
+        }
+        
         // Специальная проверка для команды /start
         if (update.hasMessage() && update.getMessage().hasText() && 
             (update.getMessage().getText().equals("/start") || update.getMessage().getText().equals("start"))) {
@@ -95,10 +102,18 @@ public class UpdateHandlerChain {
             if (handler.canHandle(update)) {
                 logger.debug("Обработчик {} может обработать обновление", handler.getClass().getSimpleName());
                 return handler.handle(update);
+            } else if (update.hasCallbackQuery()) {
+                logger.debug("Обработчик {} НЕ может обработать callback запрос '{}'", 
+                        handler.getClass().getSimpleName(), update.getCallbackQuery().getData());
             }
         }
         
-        logger.debug("Ни один обработчик не смог обработать обновление");
+        if (update.hasCallbackQuery()) {
+            logger.warn("Ни один обработчик не смог обработать callback запрос: '{}'", 
+                    update.getCallbackQuery().getData());
+        } else {
+            logger.debug("Ни один обработчик не смог обработать обновление");
+        }
         return null;
     }
 } 

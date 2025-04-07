@@ -86,6 +86,7 @@ public class AdminCallbackHandler implements UpdateHandler {
                callbackData.startsWith("delete_product_") ||
                callbackData.startsWith("edit_category_") ||
                callbackData.startsWith("delete_category_") ||
+               callbackData.startsWith("confirm_delete_category_") ||
                callbackData.startsWith("edit_shop_") ||
                callbackData.startsWith("change_user_role") ||
                callbackData.equals("add_manager") ||
@@ -148,6 +149,7 @@ public class AdminCallbackHandler implements UpdateHandler {
                 return handleEditCategory(chatId, messageId, categoryId);
             } else if (callbackData.startsWith("delete_category_")) {
                 Long categoryId = Long.parseLong(callbackData.replace("delete_category_", ""));
+                logger.info("Обрабатываем колбэк delete_category_{} для чата {}", categoryId, chatId);
                 return handleDeleteCategory(chatId, messageId, categoryId);
             } else if (callbackData.startsWith("user_details_")) {
                 return createTextMessage(chatId, "Просмотр деталей пользователя временно недоступен.");
@@ -171,9 +173,11 @@ public class AdminCallbackHandler implements UpdateHandler {
                 return handleAddManager(chatId, messageId);
             } else if (callbackData.startsWith("confirm_delete_category_")) {
                 Long categoryId = Long.parseLong(callbackData.replace("confirm_delete_category_", ""));
+                logger.info("Обрабатываем колбэк confirm_delete_category_{} для чата {}", categoryId, chatId);
                 return handleConfirmDeleteCategory(chatId, messageId, categoryId);
             }
             
+            logger.warn("Необработанный колбэк: {}", callbackData);
             return null;
         } catch (Exception e) {
             logger.error("Error handling admin callback: {}", e.getMessage(), e);
@@ -480,8 +484,11 @@ public class AdminCallbackHandler implements UpdateHandler {
      * @return ответ бота
      */
     private BotApiMethod<?> handleDeleteCategory(Long chatId, Integer messageId, Long categoryId) {
+        logger.info("Начинаем обработку запроса на удаление категории с ID={}", categoryId);
+        
         Optional<Category> categoryOpt = categoryService.getCategoryById(categoryId);
         if (categoryOpt.isEmpty()) {
+            logger.warn("Категория с ID={} не найдена при попытке удаления", categoryId);
             // Если категория не найдена, отправляем сообщение об ошибке
             SendMessage sendMessage = new SendMessage();
             sendMessage.setChatId(chatId);
@@ -492,6 +499,7 @@ public class AdminCallbackHandler implements UpdateHandler {
         }
         
         Category category = categoryOpt.get();
+        logger.info("Найдена категория для удаления: ID={}, Имя='{}'", category.getId(), category.getName());
         
         // Создаем сообщение с запросом подтверждения
         EditMessageText editMessageText = new EditMessageText();
@@ -522,6 +530,7 @@ public class AdminCallbackHandler implements UpdateHandler {
         
         editMessageText.setReplyMarkup(keyboardMarkup);
         
+        logger.info("Подготовлено сообщение с запросом подтверждения удаления категории ID={}", categoryId);
         return editMessageText;
     }
     
@@ -862,32 +871,48 @@ public class AdminCallbackHandler implements UpdateHandler {
      * @return ответ бота
      */
     private BotApiMethod<?> handleConfirmDeleteCategory(Long chatId, Integer messageId, Long categoryId) {
-        boolean deleted = categoryService.deleteCategory(categoryId);
+        logger.info("Начинаем удаление категории с ID={}", categoryId);
         
-        // Вместо редактирования сообщения, отправим новое сообщение
+        // Также сначала удалим сообщение с запросом подтверждения
+        try {
+            logger.info("Удаляем сообщение с запросом подтверждения");
+            DeleteMessage deleteMessage = new DeleteMessage();
+            deleteMessage.setChatId(chatId);
+            deleteMessage.setMessageId(messageId);
+            messageSender.executeDeleteMessage(deleteMessage);
+            logger.info("Сообщение с запросом подтверждения успешно удалено");
+        } catch (Exception e) {
+            logger.error("Ошибка при удалении сообщения с запросом подтверждения: {}", e.getMessage(), e);
+        }
+        
+        // Затем выполняем удаление категории
+        CategoryService.DeleteResult result = categoryService.deleteCategoryWithResult(categoryId);
+        logger.info("Результат удаления категории: успех={}, сообщение='{}'", result.isSuccess(), result.getMessage());
+        
+        // Отправляем сообщение с результатом
         SendMessage sendMessage = new SendMessage();
         sendMessage.setChatId(chatId);
         
-        if (deleted) {
-            sendMessage.setText("✅ Категория успешно удалена.");
+        if (result.isSuccess()) {
+            sendMessage.setText("✅ " + result.getMessage());
         } else {
-            sendMessage.setText("❌ Не удалось удалить категорию. Возможно, она уже была удалена или содержит товары.");
+            sendMessage.setText("❌ " + result.getMessage());
         }
         
         // Добавляем клавиатуру админ-панели
         sendMessage.setReplyMarkup(keyboardFactory.createAdminPanelKeyboard());
         
-        // Также удалим сообщение с запросом подтверждения
+        // Отправляем сообщение напрямую
         try {
-            DeleteMessage deleteMessage = new DeleteMessage();
-            deleteMessage.setChatId(chatId);
-            deleteMessage.setMessageId(messageId);
-            messageSender.executeDeleteMessage(deleteMessage);
+            logger.info("Отправляем сообщение с результатом удаления категории: {}", sendMessage.getText());
+            messageSender.executeMessage(sendMessage);
+            logger.info("Сообщение успешно отправлено");
         } catch (Exception e) {
-            logger.error("Ошибка при удалении сообщения: {}", e.getMessage());
+            logger.error("Ошибка при отправке сообщения с результатом: {}", e.getMessage(), e);
         }
         
-        return sendMessage;
+        // Возвращаем пустое сообщение, чтобы предотвратить повторную отправку ответа
+        return null;
     }
     
     /**
@@ -897,23 +922,38 @@ public class AdminCallbackHandler implements UpdateHandler {
      * @return ответ бота
      */
     private BotApiMethod<?> handleConfirmDeleteCategory(Long chatId, Long categoryId) {
-        boolean deleted = categoryService.deleteCategory(categoryId);
+        logger.info("Начинаем удаление категории с ID={} (без messageId)", categoryId);
         
+        // Выполняем удаление категории
+        CategoryService.DeleteResult result = categoryService.deleteCategoryWithResult(categoryId);
+        logger.info("Результат удаления категории: успех={}, сообщение='{}'", result.isSuccess(), result.getMessage());
+        
+        // Отправляем сообщение с результатом
         SendMessage sendMessage = new SendMessage();
         sendMessage.setChatId(chatId);
         
-        if (deleted) {
-            sendMessage.setText("✅ Категория успешно удалена.");
+        if (result.isSuccess()) {
+            sendMessage.setText("✅ " + result.getMessage());
         } else {
-            sendMessage.setText("❌ Не удалось удалить категорию. Возможно, она уже была удалена или содержит товары.");
+            sendMessage.setText("❌ " + result.getMessage());
         }
         
         // Добавляем клавиатуру админ-панели
         sendMessage.setReplyMarkup(keyboardFactory.createAdminPanelKeyboard());
         
-        return sendMessage;
+        // Отправляем сообщение напрямую
+        try {
+            logger.info("Отправляем сообщение с результатом удаления категории: {}", sendMessage.getText());
+            messageSender.executeMessage(sendMessage);
+            logger.info("Сообщение успешно отправлено");
+        } catch (Exception e) {
+            logger.error("Ошибка при отправке сообщения с результатом: {}", e.getMessage(), e);
+        }
+        
+        // Возвращаем пустое сообщение, чтобы предотвратить повторную отправку ответа
+        return null;
     }
-
+    
     /**
      * Обрабатывает нажатие кнопки "Редактировать товар" с использованием SendMessage
      * @param chatId ID чата

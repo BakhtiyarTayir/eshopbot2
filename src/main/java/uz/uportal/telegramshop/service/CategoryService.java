@@ -1,5 +1,7 @@
 package uz.uportal.telegramshop.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,28 @@ public class CategoryService {
     
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
+    private static final Logger logger = LoggerFactory.getLogger(CategoryService.class);
+    
+    /**
+     * Результат операции удаления
+     */
+    public static class DeleteResult {
+        private final boolean success;
+        private final String message;
+        
+        public DeleteResult(boolean success, String message) {
+            this.success = success;
+            this.message = message;
+        }
+        
+        public boolean isSuccess() {
+            return success;
+        }
+        
+        public String getMessage() {
+            return message;
+        }
+    }
     
     public CategoryService(CategoryRepository categoryRepository, ProductRepository productRepository) {
         this.categoryRepository = categoryRepository;
@@ -156,18 +180,80 @@ public class CategoryService {
     }
     
     /**
-     * Удалить категорию
+     * Удаляет категорию по ID
+     * @param id ID категории
+     * @return результат операции удаления с информацией об успехе или ошибке
+     */
+    @Transactional
+    public DeleteResult deleteCategoryWithResult(Long id) {
+        logger.info("Выполняем deleteCategoryWithResult для категории с ID={}", id);
+        
+        if (!categoryRepository.existsById(id)) {
+            logger.info("Категория с ID={} не найдена", id);
+            return new DeleteResult(false, "Категория не найдена. Возможно, она уже была удалена.");
+        }
+        
+        Optional<Category> categoryOpt = getCategoryById(id);
+        Category category = categoryOpt.get();
+        logger.info("Категория найдена: ID={}, Имя='{}', Описание='{}'", 
+                category.getId(), category.getName(), category.getDescription());
+        
+        if (category.getParent() != null) {
+            logger.info("Родительская категория: ID={}, Имя='{}'", 
+                    category.getParent().getId(), category.getParent().getName());
+        } else {
+            logger.info("Родительская категория: нет (основная категория)");
+        }
+        
+        // Проверяем, есть ли в категории товары
+        List<Product> products = productRepository.findByCategory(category);
+        if (!products.isEmpty()) {
+            logger.warn("Невозможно удалить категорию ID={}, т.к. в ней есть {} товаров:", id, products.size());
+            for (int i = 0; i < Math.min(5, products.size()); i++) {
+                Product product = products.get(i);
+                logger.warn("  - Товар {}: ID={}, Имя='{}'", i+1, product.getId(), product.getName());
+            }
+            if (products.size() > 5) {
+                logger.warn("  ... и ещё {} товаров", products.size() - 5);
+            }
+            return new DeleteResult(false, "Категорию нельзя удалить, так как в ней есть товары. Сначала удалите или переместите все товары из этой категории.");
+        }
+        
+        // Проверяем, есть ли у категории подкатегории
+        List<Category> subcategories = getSubcategories(id);
+        if (!subcategories.isEmpty()) {
+            logger.warn("Невозможно удалить категорию ID={}, т.к. у неё есть {} подкатегорий:", id, subcategories.size());
+            for (int i = 0; i < Math.min(5, subcategories.size()); i++) {
+                Category subcat = subcategories.get(i);
+                logger.warn("  - Подкатегория {}: ID={}, Имя='{}'", i+1, subcat.getId(), subcat.getName());
+            }
+            if (subcategories.size() > 5) {
+                logger.warn("  ... и ещё {} подкатегорий", subcategories.size() - 5);
+            }
+            return new DeleteResult(false, "Категорию нельзя удалить, так как у неё есть подкатегории. Сначала удалите все подкатегории.");
+        }
+        
+        logger.info("Все проверки пройдены, выполняем удаление категории ID={}", id);
+        
+        try {
+            categoryRepository.deleteById(id);
+            logger.info("Категория с ID={} успешно удалена", id);
+            return new DeleteResult(true, "Категория успешно удалена.");
+        } catch (Exception e) {
+            logger.error("Ошибка при удалении категории ID={}: {}", id, e.getMessage(), e);
+            return new DeleteResult(false, "Не удалось удалить категорию. Пожалуйста, попробуйте позже. Ошибка: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Удаляет категорию по ID
      * @param id ID категории
      * @return true, если категория успешно удалена
      */
     @Transactional
     public boolean deleteCategory(Long id) {
-        if (!categoryRepository.existsById(id)) {
-            return false;
-        }
-        
-        categoryRepository.deleteById(id);
-        return true;
+        DeleteResult result = deleteCategoryWithResult(id);
+        return result.isSuccess();
     }
     
     public Category getCategoryBySlug(String slug) {
@@ -180,13 +266,17 @@ public class CategoryService {
      * @return true, если в категории есть товары, иначе false
      */
     public boolean categoryHasProducts(Long categoryId) {
+        logger.info("Проверяем наличие товаров в категории ID={}", categoryId);
+        
         Optional<Category> categoryOpt = getCategoryById(categoryId);
         if (categoryOpt.isEmpty()) {
+            logger.info("Категория с ID={} не найдена при проверке товаров", categoryId);
             return false;
         }
         
         Category category = categoryOpt.get();
         List<Product> products = productRepository.findByCategory(category);
+        logger.info("Категория ID={} содержит {} товаров", categoryId, products.size());
         return !products.isEmpty();
     }
     
@@ -196,7 +286,10 @@ public class CategoryService {
      * @return true, если у категории есть подкатегории, иначе false
      */
     public boolean categoryHasSubcategories(Long categoryId) {
+        logger.info("Проверяем наличие подкатегорий у категории ID={}", categoryId);
+        
         List<Category> subcategories = getSubcategories(categoryId);
+        logger.info("Категория ID={} имеет {} подкатегорий", categoryId, subcategories.size());
         return !subcategories.isEmpty();
     }
 } 
