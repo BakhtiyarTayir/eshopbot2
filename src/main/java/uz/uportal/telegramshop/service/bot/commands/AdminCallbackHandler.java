@@ -76,15 +76,18 @@ public class AdminCallbackHandler implements UpdateHandler {
         }
         
         String callbackData = update.getCallbackQuery().getData();
-        return callbackData.startsWith("edit_product_") || 
-               callbackData.startsWith("delete_product_") || 
-               callbackData.startsWith("edit_category_") || 
-               callbackData.startsWith("delete_category_") || 
-               callbackData.startsWith("confirm_delete_category_") || 
-               callbackData.startsWith("products_page_") || 
-               callbackData.startsWith("categories_page_") || 
-               callbackData.startsWith("users_page_") || 
-               callbackData.startsWith("edit_shop_") ||
+        
+        return callbackData.startsWith("admin_") ||
+               callbackData.startsWith("shop_") ||
+               callbackData.startsWith("products_") ||
+               callbackData.startsWith("categories_") ||
+               callbackData.startsWith("user_") ||
+               callbackData.startsWith("edit_product_") ||
+               callbackData.startsWith("delete_product_") ||
+               callbackData.startsWith("edit_category_") ||
+               callbackData.startsWith("delete_category_") ||
+               callbackData.startsWith("change_user_role") ||
+               callbackData.equals("add_manager") ||
                callbackData.equals("back_to_admin");
     }
     
@@ -115,69 +118,62 @@ public class AdminCallbackHandler implements UpdateHandler {
         }
         
         try {
-            if (callbackData.startsWith("edit_product_")) {
+            if (callbackData.equals("admin_products")) {
+                return createTextMessage(chatId, "Управление товарами временно недоступно.");
+            } else if (callbackData.equals("admin_categories")) {
+                return createTextMessage(chatId, "Управление категориями временно недоступно.");
+            } else if (callbackData.equals("admin_orders")) {
+                return createTextMessage(chatId, "Функция управления заказами находится в разработке.");
+            } else if (callbackData.equals("admin_users")) {
+                return createTextMessage(chatId, "Управление пользователями временно недоступно.");
+            } else if (callbackData.equals("admin_settings")) {
+                return handleAdminSettings(chatId, messageId);
+            } else if (callbackData.startsWith("products_page_")) {
+                return handleProductsPage(chatId, messageId, callbackData);
+            } else if (callbackData.equals("add_product")) {
+                return createTextMessage(chatId, "Добавление товаров временно недоступно.");
+            } else if (callbackData.startsWith("edit_product_")) {
                 Long productId = Long.parseLong(callbackData.replace("edit_product_", ""));
-                
-                // Установим состояние пользователя для редактирования товара
-                user.setState("EDITING_PRODUCT_" + productId);
-                telegramUserRepository.save(user);
-                
-                return messageId != null 
-                    ? handleEditProduct(chatId, messageId, productId)
-                    : handleEditProduct(chatId, productId);
+                return handleEditProduct(chatId, messageId, productId);
             } else if (callbackData.startsWith("delete_product_")) {
                 Long productId = Long.parseLong(callbackData.replace("delete_product_", ""));
-                return messageId != null 
-                    ? handleDeleteProduct(chatId, messageId, productId)
-                    : handleDeleteProduct(chatId, productId);
+                return handleDeleteProduct(chatId, messageId, productId);
+            } else if (callbackData.equals("add_category")) {
+                return createTextMessage(chatId, "Добавление категорий временно недоступно.");
+            } else if (callbackData.startsWith("categories_page_")) {
+                return handleCategoriesPage(chatId, messageId, callbackData);
             } else if (callbackData.startsWith("edit_category_")) {
                 Long categoryId = Long.parseLong(callbackData.replace("edit_category_", ""));
-                
-                // Установим состояние пользователя для редактирования категории
-                user.setState("EDITING_CATEGORY_" + categoryId);
-                telegramUserRepository.save(user);
-                
-                return messageId != null 
-                    ? handleEditCategory(chatId, messageId, categoryId)
-                    : handleEditCategory(chatId, categoryId);
+                return handleEditCategory(chatId, messageId, categoryId);
             } else if (callbackData.startsWith("delete_category_")) {
                 Long categoryId = Long.parseLong(callbackData.replace("delete_category_", ""));
-                return messageId != null 
-                    ? handleDeleteCategory(chatId, messageId, categoryId)
-                    : handleDeleteCategory(chatId, categoryId);
-            } else if (callbackData.startsWith("confirm_delete_category_")) {
-                Long categoryId = Long.parseLong(callbackData.replace("confirm_delete_category_", ""));
-                return messageId != null 
-                    ? handleConfirmDeleteCategory(chatId, messageId, categoryId)
-                    : handleConfirmDeleteCategory(chatId, categoryId);
-            } else if (callbackData.startsWith("products_page_")) {
-                int page = Integer.parseInt(callbackData.replace("products_page_", ""));
-                return messageId != null 
-                    ? handleProductsPage(chatId, messageId, callbackData)
-                    : handleProductsPage(chatId, callbackData);
-            } else if (callbackData.startsWith("categories_page_")) {
-                int page = Integer.parseInt(callbackData.replace("categories_page_", ""));
-                return messageId != null 
-                    ? handleCategoriesPage(chatId, messageId, callbackData)
-                    : handleCategoriesPage(chatId, callbackData);
+                return handleDeleteCategory(chatId, messageId, categoryId);
+            } else if (callbackData.startsWith("user_details_")) {
+                return createTextMessage(chatId, "Просмотр деталей пользователя временно недоступен.");
             } else if (callbackData.startsWith("users_page_")) {
-                int page = Integer.parseInt(callbackData.replace("users_page_", ""));
-                return messageId != null 
-                    ? handleUsersPage(chatId, messageId, callbackData)
-                    : handleUsersPage(chatId, callbackData);
+                return handleUsersPage(chatId, messageId, callbackData);
+            } else if (callbackData.equals("shop_settings")) {
+                return createTextMessage(chatId, "Настройки магазина временно недоступны.");
+            } else if (callbackData.equals("edit_shop_contacts")) {
+                return handleEditShopSettings(chatId, messageId, callbackData);
+            } else if (callbackData.equals("edit_shop_hours")) {
+                return handleEditShopSettings(chatId, messageId, callbackData);
+            } else if (callbackData.equals("edit_shop_about")) {
+                return handleEditShopSettings(chatId, messageId, callbackData);
+            } else if (callbackData.equals("edit_shop_support")) {
+                return handleEditShopSettings(chatId, messageId, callbackData);
             } else if (callbackData.equals("back_to_admin")) {
                 return handleBackToAdmin(chatId, messageId);
-            } else if (callbackData.startsWith("edit_shop_")) {
-                return handleEditShopSettings(chatId, messageId, callbackData);
-            } else {
-                logger.warn("Unknown callback data: {}", callbackData);
-                return null;
+            } else if (callbackData.equals("change_user_role")) {
+                return handleChangeUserRole(chatId, messageId);
+            } else if (callbackData.equals("add_manager")) {
+                return handleAddManager(chatId, messageId);
             }
+            
+            return null;
         } catch (Exception e) {
             logger.error("Error handling admin callback: {}", e.getMessage(), e);
-            return messageId != null 
-                ? handleErrorWithEdit(chatId, messageId, "Произошла ошибка при обработке запроса.")
-                : createTextMessage(chatId, "Произошла ошибка при обработке запроса.");
+            return createTextMessage(chatId, "Произошла ошибка при обработке запроса: " + e.getMessage());
         }
     }
     
@@ -1022,5 +1018,133 @@ public class AdminCallbackHandler implements UpdateHandler {
         editMessageText.setText("❌ " + errorText);
         
         return editMessageText;
+    }
+
+    /**
+     * Обрабатывает кнопку для изменения роли пользователя
+     * @param chatId ID чата
+     * @param messageId ID сообщения
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleChangeUserRole(Long chatId, Integer messageId) {
+        // Получаем пользователя и меняем его состояние
+        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+        if (user == null) {
+            return createTextMessage(chatId, "Пользователь не найден");
+        }
+        
+        // Проверяем права доступа
+        if (!"ADMIN".equals(user.getRole())) {
+            return createTextMessage(chatId, "У вас нет прав на изменение ролей пользователей");
+        }
+        
+        // Устанавливаем состояние пользователя
+        user.setState("CHANGING_USER_ROLE");
+        telegramUserRepository.save(user);
+        
+        // Создаем сообщение с инструкциями
+        EditMessageText editMessage = new EditMessageText();
+        editMessage.setChatId(chatId);
+        editMessage.setMessageId(messageId);
+        editMessage.setText("🔄 *Изменение роли пользователя*\n\n" +
+                "Введите ID пользователя и новую роль в формате:\n" +
+                "*chatId|role*\n\n" +
+                "Например: `123456789|MANAGER`\n\n" +
+                "Возможные роли: `USER`, `MANAGER`, `ADMIN`");
+        editMessage.setParseMode("Markdown");
+        
+        return editMessage;
+    }
+    
+    /**
+     * Обрабатывает кнопку для добавления менеджера
+     * @param chatId ID чата
+     * @param messageId ID сообщения
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleAddManager(Long chatId, Integer messageId) {
+        // Получаем пользователя и меняем его состояние
+        TelegramUser user = telegramUserRepository.findById(chatId).orElse(null);
+        if (user == null) {
+            return createTextMessage(chatId, "Пользователь не найден");
+        }
+        
+        // Проверяем права доступа
+        if (!"ADMIN".equals(user.getRole())) {
+            return createTextMessage(chatId, "У вас нет прав на добавление менеджеров");
+        }
+        
+        // Устанавливаем состояние пользователя
+        user.setState("ADDING_MANAGER");
+        telegramUserRepository.save(user);
+        
+        // Создаем сообщение с инструкциями
+        EditMessageText editMessage = new EditMessageText();
+        editMessage.setChatId(chatId);
+        editMessage.setMessageId(messageId);
+        editMessage.setText("➕ *Добавление нового менеджера*\n\n" +
+                "Введите ID пользователя в Telegram и его имя в формате:\n" +
+                "*chatId|firstName|lastName*\n\n" +
+                "Например: `123456789|Иван|Иванов`\n\n" +
+                "Фамилия (lastName) не обязательна.");
+        editMessage.setParseMode("Markdown");
+        
+        return editMessage;
+    }
+    
+    /**
+     * Обрабатывает настройки для администратора
+     * @param chatId ID чата
+     * @param messageId ID сообщения
+     * @return ответ бота
+     */
+    private BotApiMethod<?> handleAdminSettings(Long chatId, Integer messageId) {
+        EditMessageText editMessage = new EditMessageText();
+        editMessage.setChatId(chatId);
+        editMessage.setMessageId(messageId);
+        editMessage.setText("⚙️ *Настройки администратора*\n\n" +
+                "Выберите действие из списка ниже:");
+        editMessage.setParseMode("Markdown");
+        
+        // Создаем клавиатуру
+        InlineKeyboardMarkup keyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> keyboard = new ArrayList<>();
+        
+        // Кнопка настроек магазина
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        InlineKeyboardButton shopSettingsButton = new InlineKeyboardButton();
+        shopSettingsButton.setText("🏪 Настройки магазина");
+        shopSettingsButton.setCallbackData("shop_settings");
+        row1.add(shopSettingsButton);
+        keyboard.add(row1);
+        
+        // Кнопка изменения роли пользователя
+        List<InlineKeyboardButton> row2 = new ArrayList<>();
+        InlineKeyboardButton changeRoleButton = new InlineKeyboardButton();
+        changeRoleButton.setText("🔄 Изменить роль пользователя");
+        changeRoleButton.setCallbackData("change_user_role");
+        row2.add(changeRoleButton);
+        keyboard.add(row2);
+        
+        // Кнопка добавления менеджера
+        List<InlineKeyboardButton> row3 = new ArrayList<>();
+        InlineKeyboardButton addManagerButton = new InlineKeyboardButton();
+        addManagerButton.setText("➕ Добавить менеджера");
+        addManagerButton.setCallbackData("add_manager");
+        row3.add(addManagerButton);
+        keyboard.add(row3);
+        
+        // Кнопка возврата
+        List<InlineKeyboardButton> row4 = new ArrayList<>();
+        InlineKeyboardButton backButton = new InlineKeyboardButton();
+        backButton.setText("⬅️ Назад");
+        backButton.setCallbackData("back_to_admin");
+        row4.add(backButton);
+        keyboard.add(row4);
+        
+        keyboardMarkup.setKeyboard(keyboard);
+        editMessage.setReplyMarkup(keyboardMarkup);
+        
+        return editMessage;
     }
 } 

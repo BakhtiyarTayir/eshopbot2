@@ -10,6 +10,10 @@ import uz.uportal.telegramshop.model.*;
 import uz.uportal.telegramshop.repository.OrderItemRepository;
 import uz.uportal.telegramshop.repository.OrderRepository;
 import uz.uportal.telegramshop.repository.ProductRepository;
+import uz.uportal.telegramshop.repository.TelegramUserRepository;
+import uz.uportal.telegramshop.service.bot.core.MessageSender;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,16 +31,22 @@ public class OrderService {
     private final OrderItemRepository orderItemRepository;
     private final ProductRepository productRepository;
     private final CartService cartService;
+    private final TelegramUserRepository telegramUserRepository;
+    private final MessageSender messageSender;
     
     public OrderService(
             OrderRepository orderRepository,
             OrderItemRepository orderItemRepository,
             ProductRepository productRepository,
-            CartService cartService) {
+            CartService cartService,
+            TelegramUserRepository telegramUserRepository,
+            MessageSender messageSender) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.productRepository = productRepository;
         this.cartService = cartService;
+        this.telegramUserRepository = telegramUserRepository;
+        this.messageSender = messageSender;
     }
     
     /**
@@ -186,12 +196,93 @@ public class OrderService {
             }
             
             Order order = orderOpt.get();
+            OrderStatus oldStatus = order.getStatus();
             order.setStatus(status);
             
-            return orderRepository.save(order);
+            order = orderRepository.save(order);
+            
+            logger.info("Статус заказа #{} изменен с {} на {}", orderId, oldStatus, status);
+            
+            // Если статус заказа изменился на "Выполнен", отправляем уведомление менеджерам
+            if (status == OrderStatus.COMPLETED) {
+                logger.info("Заказ #{} помечен как COMPLETED, начинаем отправку уведомлений", orderId);
+                notifyManagersAboutNewOrder(order);
+            }
+            
+            return order;
         } catch (Exception e) {
             logger.error("Ошибка при обновлении статуса заказа: {}", e.getMessage(), e);
             throw e;
+        }
+    }
+    
+    /**
+     * Отправляет уведомление менеджерам о получении заказа клиентом
+     * @param order заказ, полученный клиентом
+     */
+    private void notifyManagersAboutNewOrder(Order order) {
+        try {
+            logger.info("Начало отправки уведомлений о заказе #{}", order.getId());
+            List<TelegramUser> managers = telegramUserRepository.findByRole("MANAGER");
+            
+            logger.info("Найдено {} менеджеров для отправки уведомления", managers.size());
+            
+            if (managers.isEmpty()) {
+                logger.warn("Нет менеджеров для уведомления о полученном заказе #{}", order.getId());
+                return;
+            }
+            
+            // Формируем текст уведомления
+            StringBuilder notification = new StringBuilder();
+            notification.append("✅ *ЗАКАЗ #").append(order.getId()).append(" ПОЛУЧЕН КЛИЕНТОМ*\n\n");
+            notification.append("👤 *Клиент:* ").append(order.getUser().getFirstName());
+            if (order.getUser().getLastName() != null) {
+                notification.append(" ").append(order.getUser().getLastName());
+            }
+            notification.append("\n");
+            
+            if (order.getUser().getUsername() != null) {
+                notification.append("📱 *Username:* @").append(order.getUser().getUsername()).append("\n");
+            }
+            
+            notification.append("📞 *Телефон:* ").append(order.getPhoneNumber()).append("\n");
+            notification.append("🏠 *Адрес:* ").append(order.getAddress()).append("\n");
+            
+            notification.append("\n📋 *Состав заказа:*\n");
+            
+            for (OrderItem item : order.getItems()) {
+                notification.append("• ").append(item.getProductName())
+                        .append(" (").append(item.getQuantity()).append(" шт.) - ")
+                        .append(item.getTotalPrice()).append(" сум\n");
+            }
+            
+            notification.append("\n💰 *Итого:* ").append(order.getTotalAmount()).append(" сум");
+            
+            String notificationText = notification.toString();
+            logger.info("Подготовлено уведомление для отправки: {}", notificationText);
+            
+            // Отправляем уведомление каждому менеджеру
+            for (TelegramUser manager : managers) {
+                logger.info("Отправка уведомления менеджеру: {} ({})", 
+                          manager.getFirstName(), manager.getChatId());
+                SendMessage message = new SendMessage();
+                message.setChatId(manager.getChatId());
+                message.setText(notificationText);
+                message.setParseMode("Markdown");
+                
+                try {
+                    messageSender.executeMessage(message);
+                    logger.info("Уведомление о полученном заказе #{} отправлено менеджеру {}", 
+                               order.getId(), manager.getChatId());
+                } catch (TelegramApiException e) {
+                    logger.error("Ошибка при отправке уведомления о полученном заказе #{} менеджеру {}: {}", 
+                               order.getId(), manager.getChatId(), e.getMessage(), e);
+                }
+            }
+            logger.info("Завершена отправка уведомлений о заказе #{}", order.getId());
+        } catch (Exception e) {
+            logger.error("Ошибка при отправке уведомлений менеджерам о полученном заказе #{}: {}", 
+                       order.getId(), e.getMessage(), e);
         }
     }
     
