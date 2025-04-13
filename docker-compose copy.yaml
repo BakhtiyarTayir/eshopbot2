@@ -1,0 +1,61 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-telegramshop
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: telegramshop
+      MYSQL_USER: shop_user
+      MYSQL_PASSWORD: ytuiOWEf8923
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin-telegramshop
+    restart: always
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "8088:80"
+    depends_on:
+      - mysql
+
+  app:
+    build: .
+    container_name: app-telegramshop
+    restart: always
+    ports:
+      - "8089:8080"
+    depends_on:
+      - mysql
+    volumes:
+      - ./:/app  # Монтируем весь проект в контейнер
+      - ~/.m2:/root/.m2  # Кэш Maven для ускорения сборки
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/telegramshop?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=shop_user
+      - SPRING_DATASOURCE_PASSWORD=ytuiOWEf8923
+      - TELEGRAM_BOT_WEBHOOK_PATH=https://quudikeco.beget.app/webhook
+      - SPRING_DEVTOOLS_RESTART_ENABLED=true
+      - SPRING_DEVTOOLS_LIVERELOAD_ENABLED=true
+
+volumes:
+  mysql-data:
+    driver: local
+    driver_opts:
+      type: none
+      device: /home/admin/web/quudikeco.beget.app/public_html/mysql-data
+      o: bind
+ 

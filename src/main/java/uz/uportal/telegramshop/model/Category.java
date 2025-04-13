@@ -54,9 +54,13 @@ public class Category {
     }
     
     private String generateSlug(String name) {
-        return name.toLowerCase()
+        String baseSlug = name.toLowerCase()
                   .replaceAll("[^a-zA-Z0-9\\s]", "")
                   .replaceAll("\\s+", "-");
+        
+        // Добавляем timestamp для уникальности
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        return baseSlug + "-" + timestamp.substring(timestamp.length() - 6);
     }
     
     public Long getId() {

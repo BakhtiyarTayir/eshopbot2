@@ -17,6 +17,8 @@ public class Product {
     private String imageUrl;
     private Integer stock;
     
+    private Boolean active = true;
+    
     @ManyToOne
     @JoinColumn(name = "category_id")
     private Category category;
@@ -97,5 +99,13 @@ public class Product {
     
     public void setCategory(Category category) {
         this.category = category;
+    }
+    
+    public Boolean getActive() {
+        return active;
+    }
+    
+    public void setActive(Boolean active) {
+        this.active = active;
     }
 } 

@@ -35,19 +35,19 @@ public class ProductService {
     
     /**
      * Получить все товары
-     * @return список всех товаров
+     * @return список всех активных товаров
      */
     public List<Product> getAllProducts() {
-        return productRepository.findAll();
+        return productRepository.findByActiveTrue();
     }
     
     /**
      * Получить все товары с пагинацией
      * @param pageable параметры пагинации
-     * @return страница товаров
+     * @return страница активных товаров
      */
     public Page<Product> getAllProducts(Pageable pageable) {
-        return productRepository.findAll(pageable);
+        return productRepository.findByActiveTrue(pageable);
     }
     
     /**
@@ -62,20 +62,20 @@ public class ProductService {
     /**
      * Получить товары по категории
      * @param category категория товаров
-     * @return список товаров в категории
+     * @return список активных товаров в категории
      */
     public List<Product> getProductsByCategory(Category category) {
-        return productRepository.findByCategory(category);
+        return productRepository.findByCategoryAndActiveTrue(category);
     }
     
     /**
      * Получить товары по категории с пагинацией
      * @param category категория товаров
      * @param pageable параметры пагинации
-     * @return страница товаров в категории
+     * @return страница активных товаров в категории
      */
     public Page<Product> getProductsByCategory(Category category, Pageable pageable) {
-        return productRepository.findByCategory(category, pageable);
+        return productRepository.findByCategoryAndActiveTrue(category, pageable);
     }
     
     /**
@@ -162,12 +162,14 @@ public class ProductService {
             return false;
         }
         
-        // Удаляем изображение продукта, если оно есть
+        // Получаем продукт
         Product product = productOptional.get();
-        deleteProductImage(product);
         
-        // Удаляем сам продукт
-        productRepository.deleteById(id);
+        // Вместо физического удаления, устанавливаем active = false
+        product.setActive(false);
+        productRepository.save(product);
+        
+        logger.info("Товар с ID {} помечен как неактивный", id);
         return true;
     }
     
