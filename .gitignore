@@ -41,3 +41,7 @@ data/
 temp.txt
 backup_tmp.sql
 postgres_dump.sql
+server-docker-compose.yml
+migration-instructions.md
+post-migration-instructions.md
+backups/
