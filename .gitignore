@@ -39,3 +39,5 @@ application-dev.properties
 application.properties
 data/
 temp.txt
+backup_tmp.sql
+postgres_dump.sql
